@@ -1,4 +1,4 @@
-# Cybersec Toolbox — Projet Mastère ESI
+# Toolbox‑Cyber — Projet Mastère ESI
 
 ## Objectif
 Toolbox automatisée pour tests d’intrusion réduisant ≥40% du temps manuel.
@@ -12,8 +12,9 @@ Toolbox automatisée pour tests d’intrusion réduisant ≥40% du temps manuel.
 | Document technique final | rapport_final.pdf | N+6 mois |
 
 ## 🚀 Installation
-```bash
-git clone https://github.com/<ton-org>/esim1-cyber-toolbox.git
-cd esim1-cyber-toolbox
-python3 -m venv venv && venv\Scripts\Activate
+```powershell
+git clone https://github.com/Vanag5/Toolbox-Cyber.git
+cd Toolbox-Cyber
+python -m venv venv
+venv\Scripts\Activate
 pip install -r requirements.txt
