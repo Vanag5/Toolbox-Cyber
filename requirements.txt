@@ -1,0 +1,5 @@
+requests
+redis
+flask
+Jinja2
+celery
