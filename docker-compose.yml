@@ -34,9 +34,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data  
+      - postgres_data:/var/lib/postgresql/data  
 
-    minio:
+  minio:
     image: minio/minio
     ports:
       - "9000:9000"
