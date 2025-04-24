@@ -1,6 +1,7 @@
 __version__ = "0.1.0"
 from flask import Flask
 import os
+from .routes import routes
 
 def create_app():
     app = Flask(__name__, template_folder=os.path.abspath('toolbox/templates'))
@@ -9,4 +10,4 @@ def create_app():
     # Import et enregistrement des routes
     app.register_blueprint(routes)
 
-return app
+    return app
