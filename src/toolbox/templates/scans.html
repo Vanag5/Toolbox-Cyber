@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Active Scans{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">Active Scans</h2>
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Target</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activeScans">
+                        <tr>
+                            <td colspan="6" class="text-center">No active scans</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scan Details Modal -->
+<div class="modal fade" id="scanDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Scan Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="scan-details">
+                    <pre id="scanDetails" class="bg-light p-3"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const API_ENDPOINTS = {
+    scans: '/api/scans',
+    scanDetails: (id) => `/api/scans/${id}`,
+    stopScan: (id) => `/api/scans/${id}/stop`
+};
+
+function updateScans() {
+    fetch(API_ENDPOINTS.scans)
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('activeScans');
+            if (data.scans && data.scans.length > 0) {
+                tbody.innerHTML = data.scans.map(scan => `
+                    <tr>
+                        <td>${scan.id}</td>
+                        <td>${scan.type}</td>
+                        <td>${scan.target}</td>
+                        <td><span class="badge bg-${scan.status === 'running' ? 'primary' : 'success'}">${scan.status}</span></td>
+                        <td>
+                            <div class="progress">
+                                <div class="progress-bar" role="progressbar" style="width: ${scan.progress}%" aria-valuenow="${scan.progress}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-info" onclick="viewDetails('${scan.id}')" aria-label="View Details">
+                                <i class="fa fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="stopScan('${scan.id}')" aria-label="Stop Scan">
+                                <i class="fa fa-stop"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No active scans</td></tr>';
+            }
+        })
+        .catch(error => {
+            alert('An error occurred while fetching scan data. Please try again.');
+            console.error('Error:', error);
+        });
+}
+
+function viewDetails(scanId) {
+    fetch(API_ENDPOINTS.scanDetails(scanId))
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('scanDetails').textContent = JSON.stringify(data, null, 2);
+            new bootstrap.Modal(document.getElementById('scanDetailsModal')).show();
+        });
+}
+
+function stopScan(scanId) {
+    if (confirm('Are you sure you want to stop this scan?')) {
+        fetch(API_ENDPOINTS.stopScan(scanId), { method: 'POST' })
+            .then(() => updateScans());
+    }
+}
+
+// Update scans every 5 seconds
+setInterval(updateScans, 5000);
+updateScans();
+</script>
+{% endblock %}
