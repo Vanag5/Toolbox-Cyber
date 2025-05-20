@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="mb-4">Toolbox-Cyber Dashboard</h2>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Nmap Scanner Card -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card tool-card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa fa-search"></i> Nmap Scanner</h5>
+                <p class="card-text">Perform network discovery and security auditing.</p>
+                <form id="nmapForm" class="mt-3">
+                    <div class="mb-3">
+                        <label for="nmapTarget" class="form-label">Target:</label>
+                        <input type="text" class="form-control" id="nmapTarget" placeholder="e.g., scanme.nmap.org">
+                    </div>
+                    <div class="mb-3">
+                        <label for="nmapOptions" class="form-label">Options:</label>
+                        <select class="form-select" id="nmapOptions">
+                            <option value="-sV -sC">Version & Default Scripts</option>
+                            <option value="-sS -sV">SYN Scan + Version</option>
+                            <option value="-sV -A">Aggressive Scan</option>
+                            <option value="-p- -sV">All Ports</option>
+                            <option value="custom">Custom Options</option>
+                        </select>
+                        <input type="text" class="form-control mt-2 d-none" id="nmapCustomOptions" placeholder="Custom options">
+                    </div>
+                    <button type="submit" class="btn btn-primary" aria-label="Start Nmap Scan">
+                        <i class="fa fa-play"></i> Start Scan
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- Vulnerability Scanner Card -->
+    <div class="col-md-6 col-lg-4">
+        <div class="card tool-card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa fa-bug"></i> Vulnerability Scanner</h5>
+                <p class="card-text">Lancez un scan de vulnérabilités sur une cible.</p>
+                <form id="vulnerabilityScanForm" class="mt-3">
+                    <div class="mb-3">
+                        <label for="vulnerabilityTarget" class="form-label">Target:</label>
+                        <input type="text" class="form-control" id="vulnerabilityTarget" placeholder="e.g., 192.168.1.1 or example.com" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger" aria-label="Start Vulnerability Scan">
+                        <i class="fa fa-bug"></i> Start Scan
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+    
+
+<!-- Results Modal -->
+<div class="modal fade" id="resultsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Scan Results</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between mb-3">
+                    <div>
+                        <span class="badge bg-primary" id="scanType"></span>
+                        <span class="badge bg-secondary" id="scanTarget"></span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="downloadResults()">
+                        <i class="fa fa-download"></i> Download Report
+                    </button>
+                </div>
+                <div class="scan-result">
+                    <pre id="scanResults" class="bg-light p-3"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const API_ENDPOINTS = {
+        nmapScan: '/scan/nmap'
+    };
+
+    // Show/hide custom options for Nmap
+    document.getElementById('nmapOptions').addEventListener('change', function(e) {
+        const customInput = document.getElementById('nmapCustomOptions');
+        customInput.classList.toggle('d-none', e.target.value !== 'custom');
+    });
+
+    // Nmap scan form submission
+    document.getElementById('nmapForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const target = document.getElementById('nmapTarget').value;
+        const select = document.getElementById('nmapOptions');
+        const options = select.value === 'custom' 
+            ? document.getElementById('nmapCustomOptions').value 
+            : select.value;
+        
+        if (!target || !options) {
+            alert('Please provide a valid target and options.');
+            return;
+        }
+        
+        document.getElementById('scanType').textContent = 'Nmap Scan';
+        document.getElementById('scanTarget').textContent = target;
+        
+        fetch(API_ENDPOINTS.nmapScan, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                target: target,
+                options: options
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data || Object.keys(data).length === 0) {
+                document.getElementById('scanResults').textContent = 'No results found.';
+                return;
+            }
+            document.getElementById('scanResults').textContent = JSON.stringify(data, null, 2);
+            new bootstrap.Modal(document.getElementById('resultsModal')).show();
+        })
+        .catch(error => {
+            alert('An error occurred while starting the scan. Please try again.');
+            console.error('Error:', error);
+        });
+    });
+
+    // Download results as JSON file
+    window.downloadResults = function() {
+        const results = document.getElementById('scanResults').textContent;
+        const scanType = document.getElementById('scanType').textContent;
+        const target = document.getElementById('scanTarget').textContent;
+        
+        const blob = new Blob([results], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${scanType.toLowerCase()}_${target.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    };
+});
+</script>
+{% endblock %}
+

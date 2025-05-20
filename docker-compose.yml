@@ -1,6 +1,69 @@
-version: "3.8"
+# Docker Compose file for the Toolbox Cyber project
 services:
   toolbox:
     build: .
+    ports:
+    - "5000:5000"
+    environment:
+    - FLASK_APP=toolbox.app
+    - FLASK_RUN_HOST=0.0.0.0
+    - FLASK_RUN_PORT=5000
+    - FLASK_DEBUG=1
+    - PYTHONPATH=/src
     volumes:
-      - ./reports:/app/reports
+    - ./src:/src
+    working_dir: /src
+    depends_on:
+      - db
+      - redis
+      - minio
+      - celery
+
+  celery:
+    build: .
+    command: celery -A toolbox.tasks worker --loglevel=info
+    environment:
+      - PYTHONPATH=/Toolbox-Cyber/src
+    volumes:
+      - ./src:/src
+    depends_on:
+      - redis
+      - db
+      - minio
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: toolbox_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    ports:
+    - "9000:9000"
+    - "9001:9001"
+    environment:
+    - MINIO_ROOT_USER=minioadmin
+    - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+    - minio_data:/data
+
+volumes:
+  postgres_data:
+  minio_data:
