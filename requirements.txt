@@ -42,3 +42,7 @@ colorama==0.4.6
 cryptography==41.0.3
 beautifulsoup4==4.12.2
 requests
+
+# Authentification utilisateur avec gestion des sessions
+Flask-Login==0.6.3
+ 
