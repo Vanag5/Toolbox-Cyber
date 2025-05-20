@@ -1,6 +1,5 @@
-FROM python:3.9-slim
-
-# Install system dependencies
+FROM python:3.11-slim-bullseye
+# Upgrade pip to the latest version to avoid known vulnerabilities
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nmap \
@@ -10,7 +9,7 @@ RUN apt-get update && \
     libnet-ssleay-perl \
     libio-socket-ssl-perl \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 

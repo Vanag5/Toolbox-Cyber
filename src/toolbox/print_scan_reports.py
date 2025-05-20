@@ -1,6 +1,6 @@
 import json
 import argparse
-from app.routes import scan_reports  # Replace with a proper data source if needed
+from .routes import scan_reports  # Replace with a proper data source if needed
 
 def print_scan_reports(scan_reports, output_file=None, scan_id=None):
     """
