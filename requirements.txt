@@ -21,7 +21,7 @@ pyOpenSSL==23.2.0
 netaddr==0.8.0
 
 # Data Processing and Visualization
-numpy==1.25.0
+numpy>=1.26.0
 pandas==2.0.3
 matplotlib==3.7.2
 seaborn==0.12.2
