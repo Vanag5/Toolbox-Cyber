@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, current_app, render_template
+from flask import Blueprint, jsonify, request, render_template
 from datetime import datetime
 import time
 from .network_discovery import NetworkDiscovery

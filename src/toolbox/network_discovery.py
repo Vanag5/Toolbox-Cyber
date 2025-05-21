@@ -1,8 +1,6 @@
 import nmap
 from scapy.all import ARP, Ether, srp
-from netaddr import IPNetwork
-import socket
-from typing import List, Dict, Union
+from typing import List, Dict
 import logging
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)

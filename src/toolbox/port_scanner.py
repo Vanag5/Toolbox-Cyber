@@ -1,9 +1,8 @@
 import json
 import os
 import sys
-import socket
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Optional
 import logging
 from dataclasses import dataclass
 from enum import Enum

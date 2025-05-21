@@ -1,12 +1,9 @@
 import socket
-import ssl
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import requests
 from dataclasses import dataclass
 import logging
-from concurrent.futures import ThreadPoolExecutor
 import re
-from urllib.parse import urlparse
 
 
 @dataclass
