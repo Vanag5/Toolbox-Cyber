@@ -19,6 +19,8 @@ services:
       - minio
       - celery
 
+  
+
   celery:
     build: .
     command: celery -A toolbox.tasks worker --loglevel=info
@@ -64,6 +66,12 @@ services:
     volumes:
     - minio_data:/data
 
+  
+
+
 volumes:
   postgres_data:
   minio_data:
+ 
+
+  
