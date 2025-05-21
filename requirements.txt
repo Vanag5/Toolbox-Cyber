@@ -50,4 +50,4 @@ Flask-Login==0.6.3
 
 pytest==7.4.4
 flake8==7.0.0
-python-gvm==22.9.0  
+
