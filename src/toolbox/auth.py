@@ -7,10 +7,12 @@ from urllib.parse import urlparse, urljoin
 
 auth_bp = Blueprint('auth', __name__)
 
+
 def is_safe_url(target):
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -30,11 +32,13 @@ def login():
 
     return render_template('login.html')
 
+
 @auth_bp.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('auth.login'))
+
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -51,7 +55,8 @@ def register():
             new_user = User(username=username, password=hashed_password)
             db.session.add(new_user)
             db.session.commit()
-            flash("Inscription réussie. Vous pouvez maintenant vous connecter.", "success")
+            flash(
+                "Inscription réussie. Vous pouvez maintenant vous connecter.", "success")
 
             return redirect(url_for('auth.login'))
 

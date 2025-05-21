@@ -7,10 +7,11 @@ import logging
 
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
+
 class NetworkDiscovery:
     def __init__(self):
         self.nm = nmap.PortScanner()
-    
+
     def discover_hosts(self, target_network: str) -> List[Dict[str, str]]:
         """
         Discover live hosts in the network using ARP scanning
@@ -27,7 +28,7 @@ class NetworkDiscovery:
 
             # Send packet and get response
             result = srp(packet, timeout=3, verbose=False)[0]
-            
+
             # Process responses
             hosts = []
             for sent, received in result:
@@ -86,7 +87,7 @@ class NetworkDiscovery:
         try:
             # First discover hosts
             hosts = self.discover_hosts(target_network)
-            
+
             # Then scan each host
             for host in hosts:
                 ip = host['ip']
@@ -95,7 +96,7 @@ class NetworkDiscovery:
                     'ports': self.scan_ports(ip),
                     'os': self.get_os_info(ip)
                 }
-            
+
             return results
         except Exception as e:
             logging.error(f"Error in network scanning: {str(e)}")

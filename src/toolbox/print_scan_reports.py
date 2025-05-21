@@ -1,11 +1,13 @@
 import json
 import argparse
-from app.routes import scan_reports  # Replace with a proper data source if needed
+# Replace with a proper data source if needed
+from app.routes import scan_reports
+
 
 def print_scan_reports(scan_reports, output_file=None, scan_id=None):
     """
     Print or save scan reports.
-    
+
     Args:
         scan_reports (dict): Dictionary of scan reports.
         output_file (str): File path to save the output (optional).
@@ -16,7 +18,8 @@ def print_scan_reports(scan_reports, output_file=None, scan_id=None):
         return
 
     filtered_reports = (
-        {scan_id: scan_reports[scan_id]} if scan_id and scan_id in scan_reports else scan_reports
+        {scan_id: scan_reports[scan_id]
+         } if scan_id and scan_id in scan_reports else scan_reports
     )
 
     output = []
@@ -34,6 +37,7 @@ def print_scan_reports(scan_reports, output_file=None, scan_id=None):
         print("Scan Reports:")
         print(output_str)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Print or save scan reports.")
     parser.add_argument(
@@ -44,4 +48,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    print_scan_reports(scan_reports, output_file=args.output, scan_id=args.scan_id)
+    print_scan_reports(scan_reports, output_file=args.output,
+                       scan_id=args.scan_id)

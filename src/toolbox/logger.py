@@ -6,17 +6,18 @@ import os
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+
 class PentestLogger:
     """
     Centralized logging system for the pentest toolbox
     Handles different types of logs with proper formatting and rotation
     """
-    
+
     def __init__(self, log_dir: str = "logs"):
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(exist_ok=True, parents=True)
         os.chmod(self.log_dir, 0o777)  # Ensure full read/write permissions
-        
+
         # Create different log files for different purposes
         self.loggers = {
             'security': self._setup_logger('security', 'security.log'),
@@ -26,7 +27,7 @@ class PentestLogger:
             'audit': self._setup_logger('audit', 'audit.log'),
             'debug': self._setup_logger('debug', 'debug.log')
         }
-        
+
         # Initialize debug log file and mode
         self.debug_log_file = self.log_dir / 'debug.log'
         self.debug_mode = False
@@ -35,24 +36,24 @@ class PentestLogger:
         """Setup individual logger with proper formatting and rotation"""
         logger = logging.getLogger(name)
         logger.setLevel(logging.DEBUG)
-        
+
         # Create rotating file handler
         log_file = self.log_dir / filename
         open(log_file, 'a').close()
         os.chmod(log_file, 0o666)
-        
+
         handler = logging.handlers.RotatingFileHandler(
             log_file,
             maxBytes=10*1024*1024,  # 10MB
             backupCount=5
         )
-        
+
         # Create formatters and add it to handlers
         log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         date_format = '%Y-%m-%d %H:%M:%S'
         formatter = logging.Formatter(log_format, date_format)
         handler.setFormatter(formatter)
-        
+
         # Add handlers to the logger
         logger.addHandler(handler)
         return logger
@@ -77,7 +78,8 @@ class PentestLogger:
             'details': details
         }
         self.loggers['security'].warning(json.dumps(log_entry))
-        self.loggers['debug'].debug(f"Security event {event_type} from {source_ip} detected")
+        self.loggers['debug'].debug(
+            f"Security event {event_type} from {source_ip} detected")
 
     def log_error(self, error_type: str, error_message: str, stack_trace: Optional[str] = None) -> None:
         """Log error events"""
@@ -88,10 +90,11 @@ class PentestLogger:
             'stack_trace': stack_trace
         }
         self.loggers['error'].error(json.dumps(log_entry))
-        self.loggers['debug'].debug(f"Error {error_type} occurred: {error_message}")
+        self.loggers['debug'].debug(
+            f"Error {error_type} occurred: {error_message}")
 
-    def log_access(self, request_method: str, endpoint: str, source_ip: str, 
-                  status_code: int, response_time: float) -> None:
+    def log_access(self, request_method: str, endpoint: str, source_ip: str,
+                   status_code: int, response_time: float) -> None:
         """Log API access"""
         log_entry = {
             'timestamp': datetime.now().isoformat(),
@@ -102,7 +105,8 @@ class PentestLogger:
             'response_time': response_time
         }
         self.loggers['access'].info(json.dumps(log_entry))
-        self.loggers['debug'].debug(f"Access log: {request_method} {endpoint} from {source_ip}")
+        self.loggers['debug'].debug(
+            f"Access log: {request_method} {endpoint} from {source_ip}")
 
     def log_audit(self, user: str, action: str, resource: str, status: str) -> None:
         """Log audit events for compliance and tracking"""
@@ -119,7 +123,7 @@ class PentestLogger:
     def log_debug(self, message, **kwargs):
         """
         Log a debug message with optional additional context
-        
+
         :param message: Debug message to log
         :param kwargs: Additional context information to log
         """
@@ -128,11 +132,11 @@ class PentestLogger:
             'level': 'DEBUG',
             'message': message,
         }
-        
+
         # Add any additional context
         if kwargs:
             log_entry['context'] = kwargs
-        
+
         # Log to file
         try:
             with open(self.debug_log_file, 'a') as f:
@@ -142,7 +146,7 @@ class PentestLogger:
             # Fallback to standard print if file logging fails
             print(f"DEBUG LOG ERROR: {e}")
             print(json.dumps(log_entry))
-        
+
         # Optional: also log to console if in debug mode
         if self.debug_mode:
             print(f"DEBUG: {message}")
@@ -155,7 +159,7 @@ class PentestLogger:
             log_file = self.log_dir / f"{log_type}.log"
             if not log_file.exists():
                 return []
-            
+
             with open(log_file, 'r') as f:
                 # Read last 'limit' lines
                 lines = f.readlines()[-limit:]
@@ -163,6 +167,7 @@ class PentestLogger:
         except Exception as e:
             self.log_error('log_retrieval_error', str(e))
             return []
+
 
 # Initialize global logger instance
 logger = PentestLogger()

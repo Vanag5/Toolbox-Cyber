@@ -18,8 +18,9 @@ try:
 except ImportError:
     def install_nmap():
         """Install python-nmap if not already installed"""
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'python-nmap'])
-    
+        subprocess.check_call(
+            [sys.executable, '-m', 'pip', 'install', 'python-nmap'])
+
     try:
         install_nmap()
         import nmap
@@ -27,12 +28,14 @@ except ImportError:
         logging.error(f"Failed to import or install python-nmap: {e}")
         nmap = None
 
+
 class ScanType(Enum):
     TCP_SYN = "-sS"
     TCP_CONNECT = "-sT"
     UDP = "-sU"
     VERSION = "-sV"
     AGGRESSIVE = "-A"
+
 
 @dataclass
 class PortScanResult:
@@ -42,6 +45,7 @@ class PortScanResult:
     service: str
     version: Optional[str] = None
     protocol: str = "tcp"
+
 
 class PortScanner:
     def __init__(self, threads: int = 10):
@@ -78,7 +82,8 @@ class PortScanner:
         Perform a quick TCP SYN scan of common ports
         """
         try:
-            self.nm.scan(target, ports, arguments=f"{ScanType.TCP_SYN.value} -T4")
+            self.nm.scan(
+                target, ports, arguments=f"{ScanType.TCP_SYN.value} -T4")
             return self._parse_scan_results(target)
         except Exception as e:
             self.logger.error(f"Quick scan failed for {target}: {str(e)}")
@@ -93,7 +98,8 @@ class PortScanner:
             self.nm.scan(target, ports, arguments=args)
             return self._parse_scan_results(target)
         except Exception as e:
-            self.logger.error(f"Comprehensive scan failed for {target}: {str(e)}")
+            self.logger.error(
+                f"Comprehensive scan failed for {target}: {str(e)}")
             return []
 
     def udp_scan(self, target: str, ports: str = "53,67,68,69,123,161,162") -> List[PortScanResult]:
@@ -110,35 +116,36 @@ class PortScanner:
     def _parse_scan_results(self, target: str, protocol: str = "tcp") -> List[PortScanResult]:
         """
         Parse Nmap scan results for a given target
-        
+
         :param target: Target IP or hostname to parse results for
         :param protocol: Protocol to filter (default: tcp)
         :return: List of PortScanResult objects
         """
         try:
             # Use libnmap to parse results
-            parsed_report = NmapParser.parse_fromfile(f"/tmp/nmap_scan_{target}.xml")
-            
+            parsed_report = NmapParser.parse_fromfile(
+                f"/tmp/nmap_scan_{target}.xml")
+
             # Prepare list to store results
             results = []
-            
+
             # Track scan progress
             total_hosts = len(parsed_report.hosts)
             scanned_hosts = 0
-            
+
             # Find the corresponding scan ID
             current_scan_id = None
             for scan_id, scan_data in self.active_scans.items():
                 if scan_data.get('target') == target:
                     current_scan_id = scan_id
                     break
-            
+
             # Iterate through scanned hosts
             for host in parsed_report.hosts:
                 try:
                     # Update current scan progress
                     scanned_hosts += 1
-                    
+
                     # Filter services by protocol
                     host_results = [
                         PortScanResult(
@@ -149,12 +156,12 @@ class PortScanner:
                             version=getattr(service, 'version', '') or '',
                             protocol=service.protocol
                         )
-                        for service in host.services 
+                        for service in host.services
                         if service.protocol.lower() == protocol.lower()
                     ]
-                    
+
                     results.extend(host_results)
-                    
+
                     # Update active scan progress if applicable
                     if current_scan_id:
                         # Forcefully update progress in active_scans
@@ -165,18 +172,20 @@ class PortScanner:
                             'estimated_completion_time': datetime.now().isoformat(),
                             'percentage': int((scanned_hosts / total_hosts) * 100)
                         }
-                        
+
                         # Ensure the scan status is updated
                         if self.active_scans[current_scan_id]['status'] == 'running':
                             self.active_scans[current_scan_id]['status'] = 'completed'
-                
+
                 except Exception as host_error:
-                    self.logger.error(f"Error parsing host results: {host_error}")
-            
+                    self.logger.error(
+                        f"Error parsing host results: {host_error}")
+
             return results
-        
+
         except Exception as e:
-            self.logger.error(f"Error parsing scan results for {target}: {str(e)}")
+            self.logger.error(
+                f"Error parsing scan results for {target}: {str(e)}")
             return []
 
     def vulnerability_scan(self, target: str, ports: str) -> Dict:
@@ -187,14 +196,15 @@ class PortScanner:
             # Using common NSE scripts for vulnerability detection
             args = f"{ScanType.TCP_SYN.value} {ScanType.VERSION.value} --script=vuln,auth,default -T4"
             self.nm.scan(target, ports, arguments=args)
-            
+
             results = {}
             if target in self.nm.all_hosts():
                 if 'script' in self.nm[target]:
                     results['vulnerabilities'] = self.nm[target]['script']
             return results
         except Exception as e:
-            self.logger.error(f"Vulnerability scan failed for {target}: {str(e)}")
+            self.logger.error(
+                f"Vulnerability scan failed for {target}: {str(e)}")
             return {}
 
     def start_nmap_scan(self, target: str, options: str) -> str:
@@ -211,10 +221,10 @@ class PortScanner:
                 scan_type = 'nmap_aggressive'
             elif '-sU' in options:
                 scan_type = 'nmap_udp'
-            
+
             # Generate a unique scan ID with more robust generation
             scan_id = f"nmap_{target}_{int(time.time())}_{hash(target + options)}"
-            
+
             # Initialize scan state with comprehensive error handling
             scan_state = {
                 'target': target,
@@ -233,41 +243,42 @@ class PortScanner:
                     'percentage': 0
                 }
             }
-            
+
             # Ensure active_scans is a dictionary
             if not hasattr(self, 'active_scans') or not isinstance(self.active_scans, dict):
                 self.active_scans = {}
-            
+
             # Store scan state
             self.active_scans[scan_id] = scan_state
-            
+
             # Logging for debugging
             self.logger.info(f"Scan initiated: {scan_id} (Type: {scan_type})")
-            
+
             # Start the scan in a separate thread
             def run_scan():
                 try:
                     # Update scan status
                     self.active_scans[scan_id]['status'] = 'running'
-                    
+
                     # Prepare progress tracking
                     scan_start_time = datetime.now()
                     max_scan_duration = timedelta(minutes=2)
-                    
+
                     # Create a shared state for progress tracking
                     progress_state = {
                         'start_time': scan_start_time,
                         'max_duration': max_scan_duration,
                         'scan_id': scan_id
                     }
-                    
+
                     # Periodic progress update function
                     def update_progress(state):
                         try:
                             # Calculate progress based on elapsed time
                             elapsed_time = datetime.now() - state['start_time']
-                            progress_percentage = min(100, int((elapsed_time.total_seconds() / state['max_duration'].total_seconds()) * 100))
-                            
+                            progress_percentage = min(100, int(
+                                (elapsed_time.total_seconds() / state['max_duration'].total_seconds()) * 100))
+
                             # Update active scan progress
                             if state['scan_id'] in self.active_scans:
                                 # Forcefully update progress
@@ -278,57 +289,62 @@ class PortScanner:
                                     'estimated_completion_time': (state['start_time'] + state['max_duration']).isoformat(),
                                     'percentage': progress_percentage
                                 }
-                                
-                                self.logger.info(f"Scan progress update: {progress_percentage}%")
-                                
+
+                                self.logger.info(
+                                    f"Scan progress update: {progress_percentage}%")
+
                                 # Persist changes
                                 self.save_active_scans()
                         except Exception as progress_error:
-                            self.logger.error(f"Error updating scan progress: {progress_error}")
-                    
+                            self.logger.error(
+                                f"Error updating scan progress: {progress_error}")
+
                     # Create a timer to update progress periodically
                     import threading
-                    progress_timer = threading.Timer(5, update_progress, args=(progress_state,))
+                    progress_timer = threading.Timer(
+                        5, update_progress, args=(progress_state,))
                     progress_timer.start()
-                    
+
                     try:
                         # Perform the scan with a timeout
                         import subprocess
                         from libnmap.parser import NmapParser
-                        
+
                         # Construct Nmap command with timeout
                         import os
                         xml_output_path = f"/tmp/nmap_scan_{target}.xml"
                         nmap_cmd = f"timeout 120s nmap {target} {options} -v -oX \"{xml_output_path}\""
-                        
+
                         self.logger.info(f"Executing Nmap command: {nmap_cmd}")
-                        
+
                         # Run the scan using subprocess
                         process = subprocess.Popen(
-                            nmap_cmd, 
-                            shell=True, 
-                            stdout=subprocess.PIPE, 
+                            nmap_cmd,
+                            shell=True,
+                            stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
                             universal_newlines=True
                         )
-                        
+
                         # Capture output
                         stdout, stderr = process.communicate()
-                        
+
                         self.logger.info(f"Nmap stdout: {stdout}")
                         self.logger.info(f"Nmap stderr: {stderr}")
-                        
+
                         # Check return code
                         if process.returncode != 0:
                             raise Exception(f"Nmap scan failed: {stderr}")
-                        
+
                         # Parse the output manually
                         try:
-                            parsed_report = NmapParser.parse_fromfile(xml_output_path)
+                            parsed_report = NmapParser.parse_fromfile(
+                                xml_output_path)
                         except Exception as parse_error:
-                            self.logger.error(f"Failed to parse Nmap XML: {parse_error}")
+                            self.logger.error(
+                                f"Failed to parse Nmap XML: {parse_error}")
                             raise
-                        
+
                         # Convert parsed results to our format
                         results = []
                         for host in parsed_report.hosts:
@@ -338,29 +354,33 @@ class PortScanner:
                                     port=service.port,
                                     state=service.state,
                                     service=service.service,
-                                    version = getattr(service, 'version', '') or '',
+                                    version=getattr(
+                                        service, 'version', '') or '',
                                     protocol=service.protocol
                                 ))
-                        
+
                         # Clean up XML file
                         try:
                             os.remove(xml_output_path)
                         except Exception as cleanup_error:
-                            self.logger.warning(f"Failed to remove XML file: {cleanup_error}")
-                    
+                            self.logger.warning(
+                                f"Failed to remove XML file: {cleanup_error}")
+
                     except subprocess.TimeoutExpired:
                         # Handle timeout
-                        self.logger.warning(f"Nmap scan for {target} timed out")
+                        self.logger.warning(
+                            f"Nmap scan for {target} timed out")
                         results = []
                     finally:
                         # Stop the progress timer
                         progress_timer.cancel()
-                    
+
                     # Update scan state
                     self.active_scans[scan_id].update({
                         'status': 'completed',
                         'end_time': datetime.now().isoformat(),
-                        'results': [vars(r) for r in results],  # Convert to dict for JSON serialization
+                        # Convert to dict for JSON serialization
+                        'results': [vars(r) for r in results],
                         'progress': {
                             'total_hosts': 1,
                             'scanned_hosts': 1,
@@ -369,20 +389,20 @@ class PortScanner:
                             'percentage': 100
                         }
                     })
-                    
+
                     self.logger.info(f"Scan completed successfully: {scan_id}")
-                    
+
                     # Save active scans after completion
                     self.save_active_scans()
-                    
+
                 except Exception as e:
                     error_msg = str(e)
                     self.logger.error(f"Scan failed for {target}: {error_msg}")
-                    
+
                     # Log full traceback
                     import traceback
                     self.logger.error(traceback.format_exc())
-                    
+
                     self.active_scans[scan_id].update({
                         'status': 'failed',
                         'end_time': datetime.now().isoformat(),
@@ -397,23 +417,23 @@ class PortScanner:
                         }
                     })
                     self.save_active_scans()
-            
+
             # Submit scan to thread pool
             self.executor.submit(run_scan)
-            
+
             # Save active scans immediately
             self.save_active_scans()
-            
+
             return scan_id
-            
+
         except Exception as e:
             error_msg = f"Failed to start Nmap scan for {target}: {str(e)}"
             self.logger.error(error_msg)
-            
+
             # Log full traceback
             import traceback
             self.logger.error(traceback.format_exc())
-            
+
             raise RuntimeError(error_msg)
 
     def get_scan_status(self, scan_id: str) -> Dict:
@@ -421,21 +441,22 @@ class PortScanner:
         # Ensure active_scans is loaded
         if not hasattr(self, 'active_scans') or not isinstance(self.active_scans, dict):
             self.load_active_scans()
-        
+
         # Log all available scan IDs for debugging
-        self.logger.info(f"Available scan IDs: {list(self.active_scans.keys())}")
-        
+        self.logger.info(
+            f"Available scan IDs: {list(self.active_scans.keys())}")
+
         if scan_id not in self.active_scans:
             self.logger.warning(f"Scan not found: {scan_id}")
             return {'status': 'not_found'}
-        
+
         current_scan = self.active_scans[scan_id]
-        
+
         # Force complete status if scan has been running too long
         if current_scan['status'] == 'running':
             current_scan['status'] = 'completed'
             current_scan['end_time'] = datetime.now().isoformat()
-            
+
             # Parse results and convert to list of dictionaries
             raw_results = self._parse_scan_results('target')
             current_scan['results'] = [
@@ -447,10 +468,11 @@ class PortScanner:
                     'version': getattr(result, 'version', 'unknown')
                 } for result in raw_results
             ]
-            
+
             self.save_active_scans()
-        
+
         # Log scan status for debugging
-        self.logger.info(f"Scan status for {scan_id}: {current_scan['status']}")
-        
+        self.logger.info(
+            f"Scan status for {scan_id}: {current_scan['status']}")
+
         return current_scan

@@ -5,6 +5,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 import os
 import uuid
 
+
 def generate_pdf_report(scan_data, output_dir='/app/scan_reports'):
     """
     Generate a PDF report for a scan.
@@ -16,7 +17,8 @@ def generate_pdf_report(scan_data, output_dir='/app/scan_reports'):
     styles = getSampleStyleSheet()
 
     # Add title
-    content.append(Paragraph(f"Scan Report for {scan_data.get('target', 'Unknown')}", styles['Title']))
+    content.append(Paragraph(
+        f"Scan Report for {scan_data.get('target', 'Unknown')}", styles['Title']))
     content.append(Spacer(1, 12))
 
     # Add details
@@ -43,7 +45,8 @@ def generate_pdf_report(scan_data, output_dir='/app/scan_reports'):
     if results:
         content.append(Paragraph("Scan Results", styles['Heading2']))
         for result in results:
-            content.append(Paragraph(f"Port: {result.get('port', 'N/A')}, State: {result.get('state', 'N/A')}", styles['Normal']))
+            content.append(Paragraph(
+                f"Port: {result.get('port', 'N/A')}, State: {result.get('state', 'N/A')}", styles['Normal']))
             content.append(Spacer(1, 12))
 
     doc.build(content)

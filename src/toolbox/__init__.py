@@ -8,11 +8,14 @@ import os
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
-login_manager.login_view = 'auth.login'  # Redirige vers /login si l'utilisateur n'est pas connecté
+# Redirige vers /login si l'utilisateur n'est pas connecté
+login_manager.login_view = 'auth.login'
+
 
 def create_app():
     app = Flask(__name__)
-    app.config.from_object('toolbox.config.Config')  # Vérifie que ce chemin est correct
+    # Vérifie que ce chemin est correct
+    app.config.from_object('toolbox.config.Config')
 
     # Initialisation des extensions avec l'application
     db.init_app(app)

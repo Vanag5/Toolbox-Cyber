@@ -1,5 +1,6 @@
 from celery import Celery
 
+
 def create_celery():
     celery = Celery(
         'pentest_toolbox',
@@ -7,7 +8,7 @@ def create_celery():
         backend='redis://redis:6379/0',
         include=['tasks']
     )
-    
+
     celery.conf.update(
         task_serializer='json',
         accept_content=['json'],
@@ -15,7 +16,8 @@ def create_celery():
         timezone='UTC',
         enable_utc=True,
     )
-    
+
     return celery
+
 
 celery = create_celery()
