@@ -45,4 +45,5 @@ requests
 
 # Authentification utilisateur avec gestion des sessions
 Flask-Login==0.6.3
- 
+pytest==7.4.4
+
