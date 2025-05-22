@@ -1,12 +1,10 @@
 import socket
-import ssl
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import requests
 from dataclasses import dataclass
 import logging
-from concurrent.futures import ThreadPoolExecutor
 import re
-from urllib.parse import urlparse
+
 
 @dataclass
 class ServiceInfo:
@@ -14,6 +12,7 @@ class ServiceInfo:
     version: Optional[str] = None
     banner: Optional[str] = None
     details: Optional[Dict] = None
+
 
 class ServiceEnumerator:
     def __init__(self):
@@ -39,7 +38,8 @@ class ServiceEnumerator:
             else:
                 return self._enumerate_generic_service(host, port)
         except Exception as e:
-            self.logger.error(f"Service enumeration failed for {host}:{port} ({service_name}): {str(e)}")
+            self.logger.error(
+                f"Service enumeration failed for {host}:{port} ({service_name}): {str(e)}")
             return ServiceInfo(name=service_name)
 
     def _enumerate_web_service(self, host: str, port: int, is_https: bool) -> ServiceInfo:
@@ -64,21 +64,22 @@ class ServiceEnumerator:
                         "status": response.status_code,
                         "size": len(response.content)
                     }
-                    
+
                     # Capture headers from root path only
                     if path == "/":
                         details["headers"] = dict(response.headers)
                         server = response.headers.get("Server", "")
                         powered_by = response.headers.get("X-Powered-By", "")
-                        
+
                         # Detect technologies
                         if "nginx" in server.lower():
                             details["technologies"].append("Nginx")
                         if "apache" in server.lower():
                             details["technologies"].append("Apache")
                         if "php" in powered_by.lower():
-                            details["technologies"].append(f"PHP ({powered_by})")
-                        
+                            details["technologies"].append(
+                                f"PHP ({powered_by})")
+
                 except requests.RequestException:
                     continue
 
@@ -89,7 +90,8 @@ class ServiceEnumerator:
                 details=details
             )
         except Exception as e:
-            self.logger.error(f"Web service enumeration failed for {base_url}: {str(e)}")
+            self.logger.error(
+                f"Web service enumeration failed for {base_url}: {str(e)}")
             return ServiceInfo(name="http" if not is_https else "https")
 
     def _enumerate_ssh(self, host: str, port: int) -> ServiceInfo:
@@ -98,7 +100,8 @@ class ServiceEnumerator:
         """
         try:
             with socket.create_connection((host, port), timeout=5) as sock:
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                banner = sock.recv(1024).decode(
+                    'utf-8', errors='ignore').strip()
                 version = re.search(r'SSH-\d+\.\d+-([^\s]+)', banner)
                 return ServiceInfo(
                     name="ssh",
@@ -106,7 +109,8 @@ class ServiceEnumerator:
                     banner=banner
                 )
         except Exception as e:
-            self.logger.error(f"SSH enumeration failed for {host}:{port}: {str(e)}")
+            self.logger.error(
+                f"SSH enumeration failed for {host}:{port}: {str(e)}")
             return ServiceInfo(name="ssh")
 
     def _enumerate_ftp(self, host: str, port: int) -> ServiceInfo:
@@ -115,7 +119,8 @@ class ServiceEnumerator:
         """
         try:
             with socket.create_connection((host, port), timeout=5) as sock:
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                banner = sock.recv(1024).decode(
+                    'utf-8', errors='ignore').strip()
                 version = re.search(r'FTP|FileZilla|vsftpd|ProFTPD', banner)
                 return ServiceInfo(
                     name="ftp",
@@ -123,7 +128,8 @@ class ServiceEnumerator:
                     banner=banner
                 )
         except Exception as e:
-            self.logger.error(f"FTP enumeration failed for {host}:{port}: {str(e)}")
+            self.logger.error(
+                f"FTP enumeration failed for {host}:{port}: {str(e)}")
             return ServiceInfo(name="ftp")
 
     def _enumerate_smtp(self, host: str, port: int) -> ServiceInfo:
@@ -132,7 +138,8 @@ class ServiceEnumerator:
         """
         try:
             with socket.create_connection((host, port), timeout=5) as sock:
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                banner = sock.recv(1024).decode(
+                    'utf-8', errors='ignore').strip()
                 # Try EHLO command
                 sock.send(b'EHLO example.com\r\n')
                 response = sock.recv(1024).decode('utf-8', errors='ignore')
@@ -144,7 +151,8 @@ class ServiceEnumerator:
                     details={"extended_info": response}
                 )
         except Exception as e:
-            self.logger.error(f"SMTP enumeration failed for {host}:{port}: {str(e)}")
+            self.logger.error(
+                f"SMTP enumeration failed for {host}:{port}: {str(e)}")
             return ServiceInfo(name="smtp")
 
     def _enumerate_generic_service(self, host: str, port: int) -> ServiceInfo:
@@ -155,11 +163,13 @@ class ServiceEnumerator:
             with socket.create_connection((host, port), timeout=5) as sock:
                 # Send a generic probe
                 sock.send(b'\r\n')
-                banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+                banner = sock.recv(1024).decode(
+                    'utf-8', errors='ignore').strip()
                 return ServiceInfo(
                     name="unknown",
                     banner=banner
                 )
         except Exception as e:
-            self.logger.error(f"Generic service enumeration failed for {host}:{port}: {str(e)}")
+            self.logger.error(
+                f"Generic service enumeration failed for {host}:{port}: {str(e)}")
             return ServiceInfo(name="unknown")

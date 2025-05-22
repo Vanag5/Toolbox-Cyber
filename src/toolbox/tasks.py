@@ -1,6 +1,7 @@
 import os
 from celery import Celery
 
+
 def create_celery(app=None):
     """
     Create and configure a Celery instance.
@@ -12,7 +13,7 @@ def create_celery(app=None):
         backend=os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0'),
         include=['toolbox.tasks']
     )
-    
+
     # Update Celery configurations
     celery.conf.update(
         task_serializer='json',
@@ -21,7 +22,7 @@ def create_celery(app=None):
         timezone='UTC',
         enable_utc=True,
     )
-    
+
     # Integrate with Flask app context if provided
     if app:
         celery.conf.update(app.config)
@@ -33,8 +34,9 @@ def create_celery(app=None):
                     return TaskBase.__call__(self, *args, **kwargs)
 
         celery.Task = ContextTask
-    
+
     return celery
+
 
 # Create a global Celery instance
 celery = create_celery()

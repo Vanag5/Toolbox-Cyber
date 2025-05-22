@@ -1,12 +1,13 @@
 FROM python:3.11-slim-bullseye
-# Upgrade pip to the latest version to avoid known vulnerabilities
+
+# Install system dependencies
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nmap \
     git \
     python3-pip \
     perl \
-    libnet-ssleay-perl \
+    libnet-ssleay-perl \ 
     libio-socket-ssl-perl \
     gcc \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

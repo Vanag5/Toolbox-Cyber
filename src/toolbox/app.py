@@ -1,13 +1,12 @@
-print("Starting Flask application...")
-from toolbox import create_app
-from toolbox.routes import main_bp, scan_bp, report_bp
-from flask import request, jsonify, render_template
 import os
+from flask import request, jsonify, render_template
+from toolbox import create_app
+print("Starting Flask application...")
 
 app = create_app()
 
 # Create Flask app with explicit template folder
-# app = Flask(__name__, 
+# app = Flask(__name__,
 #            template_folder=os.path.join(os.path.dirname(__file__), 'app', 'templates'),
 #            static_folder=os.path.join(os.path.dirname(__file__), 'app', 'static'))
 
@@ -26,17 +25,21 @@ active_scans = {}
 scan_reports = {}
 
 # Error handlers
+
+
 @app.errorhandler(404)
 def not_found_error(error):
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'error', 'message': 'Resource not found'}), 404
     return render_template('error.html', error={'code': 404, 'message': 'Resource not found'}), 404
 
+
 @app.errorhandler(500)
 def internal_error(error):
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
     return render_template('error.html', error={'code': 500, 'message': 'Internal server error'}), 500
+
 
 if __name__ == '__main__':
     # Create logs directory if it doesn't exist
