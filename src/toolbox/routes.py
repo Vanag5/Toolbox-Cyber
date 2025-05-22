@@ -1,17 +1,24 @@
-from flask import Blueprint, jsonify, request, render_template, send_file
+from flask import (
+    Blueprint, jsonify, request, render_template, send_file
+)
 from datetime import datetime, timedelta
-import time
-import traceback
-import os
-import uuid
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Dict
-from concurrent.futures import ThreadPoolExecutor
+import traceback
+import time
+import os
+import uuid
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+
+from gvm.protocols.gmp import Gmp
 
 from .network_discovery import NetworkDiscovery
 from .port_scanner import PortScanner
@@ -19,7 +26,6 @@ from .service_enum import ServiceEnumerator
 from .logger import logger
 from .pdf_utils import generate_pdf_report
 from .scanner import get_vuln_scanner
-from gvm.protocols.gmp import Gmp
 
 main_bp = Blueprint('main', __name__)
 report_bp = Blueprint('report', __name__, url_prefix='/report')
@@ -32,9 +38,11 @@ net_discovery = NetworkDiscovery()
 port_scanner = PortScanner()
 service_enumerator = ServiceEnumerator()
 
+
 @main_bp.before_request
 def log_request_info():
     request.start_time = time.time()
+
 
 @main_bp.after_request
 def log_request_complete(response):
@@ -48,25 +56,37 @@ def log_request_complete(response):
     )
     return response
 
+
 @main_bp.route('/')
 def index():
     return render_template('index.html')
 
+
 @main_bp.route('/api/status')
 def api_status():
-    return jsonify({'status': 'ok', 'message': 'Pentest Toolbox API is running'})
+    return jsonify({
+        'status': 'ok',
+        'message': 'Pentest Toolbox API is running'
+    })
+
 
 @main_bp.route('/health')
 def health():
-    return jsonify({'status': 'healthy', 'service': 'pentest-toolbox'})
+    return jsonify({
+        'status': 'healthy',
+        'service': 'pentest-toolbox'
+    })
+
 
 @main_bp.route('/scans')
 def scans():
     return render_template('scans.html')
 
+
 @main_bp.route('/reports')
 def reports():
     return render_template('reports.html')
+
 
 @main_bp.route('/api/scans')
 def api_scans():
@@ -86,6 +106,7 @@ def api_scans():
     except Exception as e:
         logger.log_error('api_scans_error', str(e), traceback.format_exc())
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @main_bp.route('/api/reports')
 def api_reports():
