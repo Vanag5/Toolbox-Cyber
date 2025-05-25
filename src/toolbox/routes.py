@@ -5,7 +5,6 @@ from .network_discovery import NetworkDiscovery
 from .service_enum import ServiceEnumerator
 from .logger import logger
 import traceback
-from gvm.protocols.gmp import Gmp
 from concurrent.futures import ThreadPoolExecutor
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -19,7 +18,6 @@ import uuid
 from typing import Dict
 from datetime import timedelta
 from .pdf_utils import generate_pdf_report
-from .scanner import get_vuln_scanner
 from toolbox.models import ScanResult
 import json
 from flask_login import login_required
@@ -551,171 +549,6 @@ def get_logs(log_type):
     except Exception as e:
         logger.log_error(
             error_type='log_retrieval_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports')
-def list_reports():
-    """List all scan reports"""
-    try:
-        report_type = request.args.get('type', 'all')
-        # Get OpenVAS reports
-        vuln_scanner = get_vuln_scanner()
-        with Gmp(connection=vuln_scanner.connection, transform=vuln_scanner.transform) as gmp:
-            gmp.authenticate(vuln_scanner.username, vuln_scanner.password)
-            reports = gmp.get_reports()
-
-            report_list = []
-            for report in reports.findall(".//report"):
-                if report_type == 'all' or report_type == 'vulnerability':
-                    report_list.append({
-                        'id': report.get('id'),
-                        'type': 'vulnerability',
-                        'target': report.find('.//host').text,
-                        'timestamp': report.find('.//timestamp').text,
-                        'severity': float(report.find('.//severity').text) if report.find('.//severity') is not None else 0.0
-                    })
-            return jsonify({
-                'status': 'success',
-                'reports': report_list
-            })
-    except Exception as e:
-        logger.log_error(
-            error_type='list_reports_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports/<report_id>')
-def get_report(report_id):
-    """Get a specific report"""
-    try:
-        vuln_scanner = get_vuln_scanner()
-        with Gmp(connection=vuln_scanner.connection, transform=vuln_scanner.transform) as gmp:
-            gmp.authenticate(vuln_scanner.username, vuln_scanner.password)
-            report = gmp.get_report(report_id)
-            results = vuln_scanner._parse_results(gmp, report_id)
-            return jsonify({
-                'status': 'success',
-                'report': {
-                    'id': report_id,
-                    'type': 'vulnerability',
-                    'target': report.find('.//host').text,
-                    'timestamp': report.find('.//timestamp').text,
-                    'results': [vars(r) for r in results]
-                }
-            })
-    except Exception as e:
-        logger.log_error(
-            error_type='get_report_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports/<report_id>', methods=['DELETE'])
-def delete_report(report_id):
-    """Delete a specific report"""
-    try:
-        vuln_scanner = get_vuln_scanner()
-        with Gmp(connection=vuln_scanner.connection, transform=vuln_scanner.transform) as gmp:
-            gmp.authenticate(vuln_scanner.username, vuln_scanner.password)
-            gmp.delete_report(report_id)
-            return jsonify({
-                'status': 'success',
-                'message': 'Report deleted successfully'
-            })
-    except Exception as e:
-        logger.log_error(
-            error_type='delete_report_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports/<report_id>/pdf')
-def get_report_pdf(report_id):
-    """Get a specific report in PDF format"""
-    try:
-        # Get the report data first
-        report_data = get_report(report_id).get_json()
-        if report_data['status'] != 'success':
-            return jsonify(report_data), 500
-        # Create PDF
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72,
-                                leftMargin=72, topMargin=72, bottomMargin=18)
-        # Prepare report content
-        content = []
-        styles = getSampleStyleSheet()
-        # Title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=24,
-            spaceAfter=30
-        )
-        content.append(Paragraph("Nmap Scan Report", title_style))
-        content.append(Spacer(1, 12))
-        # Report Details
-        report = report_data['report']
-        details = [
-            ["Report ID:", report['id']],
-            ["Type:", report['type']],
-            ["Target:", report['target']],
-            ["Timestamp:", report['timestamp']]
-        ]
-        t = Table(details)
-        t.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 12),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-            ('PADDING', (0, 0), (-1, -1), 6),
-        ]))
-        content.append(t)
-        content.append(Spacer(1, 20))
-        # Results
-        if report.get('results'):
-            content.append(Paragraph("Scan Results", styles['Heading2']))
-            content.append(Spacer(1, 12))
-            for result in report['results']:
-                result_text = f"""
-                Port: {result.get('port', 'N/A')}
-                State: {result.get('state', 'N/A')}
-                Service: {result.get('service', 'N/A')}
-                Version: {result.get('version', 'N/A')}
-                Protocol: {result.get('protocol', 'N/A')}
-                """
-                content.append(Paragraph(result_text, styles['Normal']))
-                content.append(Spacer(1, 12))
-        # Build PDF
-        doc.build(content)
-        buffer.seek(0)
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name=f"nmap_scan_report_{report_id}.pdf",
-            mimetype='application/pdf'
-        )
-    except Exception as e:
-        logger.log_error(
-            error_type='get_report_pdf_error',
             error_message=str(e),
             stack_trace=traceback.format_exc()
         )
