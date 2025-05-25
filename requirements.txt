@@ -15,8 +15,6 @@ Flask-Migrate==4.0.4
 python-libnmap==0.7.0
 python-nmap
 scapy==2.5.0
-python-gvm==21.5.0
-paramiko
 pyOpenSSL==23.2.0
 netaddr==0.8.0
 
@@ -45,9 +43,6 @@ requests
 
 # Authentification utilisateur avec gestion des sessions
 Flask-Login==0.6.3
-
-
-
 pytest==7.4.4
 flake8==7.0.0
 
