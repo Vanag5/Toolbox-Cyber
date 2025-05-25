@@ -1,6 +1,6 @@
 import os
 from celery import Celery
-
+from . import celery
 
 def create_celery(app=None):
     """
@@ -13,7 +13,6 @@ def create_celery(app=None):
         backend=os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0'),
         include=['toolbox.tasks']
     )
-
     # Update Celery configurations
     celery.conf.update(
         task_serializer='json',
@@ -22,7 +21,6 @@ def create_celery(app=None):
         timezone='UTC',
         enable_utc=True,
     )
-
     # Integrate with Flask app context if provided
     if app:
         celery.conf.update(app.config)
@@ -37,6 +35,20 @@ def create_celery(app=None):
 
     return celery
 
-
 # Create a global Celery instance
 celery = create_celery()
+
+@celery.task(bind=True)
+def run_nmap_scan(self, targets, ports):
+    # initialisation
+    total_steps = len(ports)  # nombre total d'étapes ou de ports à scanner
+    results = []
+    for i, port in enumerate(ports):
+        # exécution d'une étape du scan (remplacer par l'appel réel à nmap)
+        # result = nmap_scan(targets, port)
+        result = f"Scanned {targets} on port {port}"  # placeholder
+        results.append(result)
+        progress = int((i + 1) / total_steps * 100)
+        self.update_state(state='PROGRESS', meta={'progress': progress, 'message': 'Scan en cours...'})
+    # fin du scan
+    return {'progress': 100, 'message': 'Scan terminé', 'result': results}

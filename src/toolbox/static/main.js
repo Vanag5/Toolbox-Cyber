@@ -43,7 +43,13 @@ class ScanManager {
             if (data.status === 'success') {
                 this.activeScanId = data.scan_id;
                 showAlert('Scan started successfully', 'success');
+                console.log("Appel monitorProgress pour scan_id:", this.activeScanId);
                 this.monitorProgress();
+                const resultsModal = document.getElementById('resultsModal');
+                if (resultsModal) {
+                    const modal = new bootstrap.Modal(resultsModal);
+                    modal.show();
+                }
             } else {
                 showAlert(data.message || 'Failed to start scan', 'danger');
             }
@@ -54,32 +60,46 @@ class ScanManager {
     }
 
     monitorProgress() {
-        if (!this.activeScanId) return;
+    if (!this.activeScanId) return;
+    console.log("Polling lancé pour scan_id:", this.activeScanId);    
+    const progressBar = document.querySelector('.progress-bar');
+    const statusDiv = document.getElementById('scanStatus');
+    const downloadBtn = document.getElementById('downloadResultsBtn');
 
-        const progressBar = document.querySelector('.progress-bar');
-        const statusDiv = document.getElementById('scanStatus');
-
-        this.updateInterval = setInterval(() => {
-            fetch(`${API_ENDPOINTS.scanStatus}/${this.activeScanId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        progressBar.style.width = `${data.progress}%`;
-                        progressBar.textContent = `${data.progress}%`;
-                        statusDiv.textContent = data.message;
-
-                        if (data.scan_status === 'Done') {
-                            this.stopMonitoring();
-                            this.loadResults();
-                        }
+    this.updateInterval = setInterval(() => {
+        fetch(`/scan/nmap/${this.activeScanId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Réponse status scan :", data);
+                if (data.status === 'success') {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressBar.textContent = `${data.progress}%`;
+                    statusDiv.textContent = data.message;
+                    
+                    // Arrête le polling dès que 100% atteint
+                    if (data.progress === 100) {
+                        this.stopMonitoring();
                     }
-                })
-                .catch(error => {
-                    showAlert('Error monitoring scan: ' + error, 'danger');
-                    this.stopMonitoring();
-                });
-        }, 5000);
-    }
+                    // Active le bouton si le scan est terminé et report_id existe
+                    if (data.scan_status === 'completed' && data.report_id) {
+                        if (downloadBtn) {
+                            downloadBtn.disabled = false;
+                            downloadBtn.onclick = () => {
+                                window.open(`/scan/nmap/${this.activeScanId}/report`, '_blank');
+                            };
+                        }
+                        this.stopMonitoring();
+                        // Optionnel : charger les résultats si tu veux remplir un tableau
+                        // this.loadResults();
+                    }
+                }
+            })
+            .catch(error => {
+                showAlert('Error monitoring scan: ' + error, 'danger');
+                this.stopMonitoring();
+            });
+    }, 5000);
+}
 
     stopMonitoring() {
         if (this.updateInterval) {
@@ -91,12 +111,18 @@ class ScanManager {
     loadResults() {
         if (!this.activeScanId) return;
 
-        fetch(`${API_ENDPOINTS.scanReport}/${this.activeScanId}`)
+        fetch(`/scan/nmap/${this.activeScanId}/report`)
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
                     this.updateResultsTable(data.report);
                     showAlert('Scan completed successfully', 'success');
+                    const downloadBtn = document.getElementById('downloadResultsBtn');
+                    if (downloadBtn) {
+                        downloadBtn.disabled = false;
+                        // Stocke les résultats pour le téléchargement
+                        downloadBtn.dataset.results = JSON.stringify(data.report);
+                    }
                 } else {
                     showAlert(data.message || 'Failed to load results', 'warning');
                 }
@@ -150,12 +176,15 @@ const API_ENDPOINTS = {
     vulnerabilityScan: '/scan/vulnerability/scan',
     networkDiscovery: '/scan/network/discover',
     portScan: '/scan/ports',
-    scanStatus: '/scan/vulnerability/scan/status',
-    scanReport: '/scan/vulnerability/report'
+    scanStatus: '/scan/nmap/<scan_id>/status',      // <-- adapte ce endpoint selon ton backend
+    scanReport: '/scan/nmap/<scan_id>/report'       // <-- adapte ce endpoint selon ton backend
 };
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
+    const downloadBtn = document.getElementById('downloadResultsBtn');
+    if (downloadBtn) downloadBtn.disabled = true;
+
     function handleFormSubmit(formId, endpoint, dataExtractor) {
         const form = document.getElementById(formId);
         if (form) {
@@ -182,12 +211,16 @@ document.addEventListener('DOMContentLoaded', () => {
             endpoint: API_ENDPOINTS.vulnerabilityScan,
             dataExtractor: () => ({
                 target: document.getElementById('vulnerabilityTarget').value
-            })
-        }
+            }) },
+        { id: 'nmapForm', endpoint: '/scan/nmap', dataExtractor: () => ({
+        target: document.getElementById('nmapTarget').value,
+        options: document.getElementById('nmapOptions').value === 'custom'
+            ? document.getElementById('nmapCustomOptions').value
+            : document.getElementById('nmapOptions').value
+        }) }
     ];
 
     forms.forEach(({ id, endpoint, dataExtractor }) => {
         handleFormSubmit(id, endpoint, dataExtractor);
     });
 });
-

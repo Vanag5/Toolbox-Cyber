@@ -129,6 +129,17 @@ function viewReport(reportId) {
             document.getElementById('reportTarget').textContent = data.target;
             document.getElementById('reportDate').textContent = formatDate(data.timestamp);
             document.getElementById('reportContent').textContent = JSON.stringify(data.results, null, 2);
+
+            // Gère le bouton de téléchargement selon le statut
+            const downloadBtn = document.querySelector('#reportModal .btn-outline-secondary');
+            if (data.status && data.status !== 'completed') {
+                downloadBtn.disabled = true;
+                downloadBtn.textContent = "En attente de la fin du scan...";
+            } else {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = "Download";
+            }
+
             new bootstrap.Modal(document.getElementById('reportModal')).show();
         });
 }

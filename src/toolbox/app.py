@@ -1,15 +1,17 @@
 import os
 from flask import request, jsonify, render_template
 from toolbox import create_app
+import logging
+
+logging.basicConfig(level=logging.INFO)
 print("Starting Flask application...")
 
 app = create_app()
-
+logging.info(f"Flask app id (main): {id(app)}")
 # Create Flask app with explicit template folder
 # app = Flask(__name__,
 #            template_folder=os.path.join(os.path.dirname(__file__), 'app', 'templates'),
 #            static_folder=os.path.join(os.path.dirname(__file__), 'app', 'static'))
-
 # Define Nmap scan profiles
 NMAP_SCAN_PROFILES = {
     'quick': '-F -sV',  # Fast scan of common ports
@@ -19,13 +21,10 @@ NMAP_SCAN_PROFILES = {
     'vuln': '-sV -sC --script=vuln',  # Vulnerability scan
     'service': '-sV -sC -p-',  # Full port range service scan
 }
-
 # In-memory storage for active scans and reports
 active_scans = {}
 scan_reports = {}
-
 # Error handlers
-
 
 @app.errorhandler(404)
 def not_found_error(error):
@@ -33,13 +32,11 @@ def not_found_error(error):
         return jsonify({'status': 'error', 'message': 'Resource not found'}), 404
     return render_template('error.html', error={'code': 404, 'message': 'Resource not found'}), 404
 
-
 @app.errorhandler(500)
 def internal_error(error):
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
     return render_template('error.html', error={'code': 500, 'message': 'Internal server error'}), 500
-
 
 if __name__ == '__main__':
     # Create logs directory if it doesn't exist

@@ -15,7 +15,7 @@
         <div class="card tool-card h-100">
             <div class="card-body">
                 <h5 class="card-title"><i class="fa fa-search"></i> Nmap Scanner</h5>
-                <p class="card-text">Perform network discovery and security auditing.</p>
+                <p class="card-text">Lancez un scan de découverte des ports sur une cible.</p>
                 <form id="nmapForm" class="mt-3">
                     <div class="mb-3">
                         <label for="nmapTarget" class="form-label">Target:</label>
@@ -76,10 +76,14 @@
                         <span class="badge bg-primary" id="scanType"></span>
                         <span class="badge bg-secondary" id="scanTarget"></span>
                     </div>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="downloadResults()">
+                    <button id="downloadResultsBtn" class="btn btn-sm btn-outline-secondary" onclick="downloadResults()" disabled>
                         <i class="fa fa-download"></i> Download Report
                     </button>
                 </div>
+                <div class="progress mt-3">
+                    <div class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+                </div>
+                <div id="scanStatus" class="mt-2"></div>
                 <div class="scan-result">
                     <pre id="scanResults" class="bg-light p-3"></pre>
                 </div>
@@ -88,79 +92,3 @@
     </div>
 </div>
 {% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const API_ENDPOINTS = {
-        nmapScan: '/scan/nmap'
-    };
-
-    // Show/hide custom options for Nmap
-    document.getElementById('nmapOptions').addEventListener('change', function(e) {
-        const customInput = document.getElementById('nmapCustomOptions');
-        customInput.classList.toggle('d-none', e.target.value !== 'custom');
-    });
-
-    // Nmap scan form submission
-    document.getElementById('nmapForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const target = document.getElementById('nmapTarget').value;
-        const select = document.getElementById('nmapOptions');
-        const options = select.value === 'custom' 
-            ? document.getElementById('nmapCustomOptions').value 
-            : select.value;
-        
-        if (!target || !options) {
-            alert('Please provide a valid target and options.');
-            return;
-        }
-        
-        document.getElementById('scanType').textContent = 'Nmap Scan';
-        document.getElementById('scanTarget').textContent = target;
-        
-        fetch(API_ENDPOINTS.nmapScan, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                target: target,
-                options: options
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (!data || Object.keys(data).length === 0) {
-                document.getElementById('scanResults').textContent = 'No results found.';
-                return;
-            }
-            document.getElementById('scanResults').textContent = JSON.stringify(data, null, 2);
-            new bootstrap.Modal(document.getElementById('resultsModal')).show();
-        })
-        .catch(error => {
-            alert('An error occurred while starting the scan. Please try again.');
-            console.error('Error:', error);
-        });
-    });
-
-    // Download results as JSON file
-    window.downloadResults = function() {
-        const results = document.getElementById('scanResults').textContent;
-        const scanType = document.getElementById('scanType').textContent;
-        const target = document.getElementById('scanTarget').textContent;
-        
-        const blob = new Blob([results], { type: 'application/json' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${scanType.toLowerCase()}_${target.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    };
-});
-</script>
-{% endblock %}
-

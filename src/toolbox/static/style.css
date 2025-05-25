@@ -137,3 +137,9 @@ body {
     background: #0056b3;
 }
 
+/* Correction du menu déroulant invisible */
+select,
+select option {
+    background-color: var(--secondary-dark);
+    color: var(--text-light);
+}

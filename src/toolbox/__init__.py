@@ -10,7 +10,6 @@ login_manager = LoginManager()
 # Redirige vers /login si l'utilisateur n'est pas connecté
 login_manager.login_view = 'auth.login'
 
-
 def create_app():
     app = Flask(__name__)
     # Vérifie que ce chemin est correct
@@ -25,7 +24,8 @@ def create_app():
     from .routes import main_bp, scan_bp, report_bp
     from .auth import auth_bp
     from .models import User
-
+    from .port_scanner import PortScanner
+    app.port_scanner = PortScanner(app=app)
     # Enregistrement des blueprints
     app.register_blueprint(main_bp)
     app.register_blueprint(scan_bp, url_prefix='/scan')

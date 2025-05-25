@@ -5,7 +5,6 @@ from reportlab.lib.styles import getSampleStyleSheet
 import os
 import uuid
 
-
 def generate_pdf_report(scan_data, output_dir='/app/scan_reports'):
     """
     Generate a PDF report for a scan.
@@ -15,12 +14,10 @@ def generate_pdf_report(scan_data, output_dir='/app/scan_reports'):
     doc = SimpleDocTemplate(report_filename, pagesize=letter)
     content = []
     styles = getSampleStyleSheet()
-
     # Add title
     content.append(Paragraph(
         f"Scan Report for {scan_data.get('target', 'Unknown')}", styles['Title']))
     content.append(Spacer(1, 12))
-
     # Add details
     details = [
         ['Scan Type', scan_data.get('scan_type', 'Unknown')],
@@ -39,15 +36,24 @@ def generate_pdf_report(scan_data, output_dir='/app/scan_reports'):
     ]))
     content.append(table)
     content.append(Spacer(1, 12))
-
     # Add results
     results = scan_data.get('results', [])
     if results:
         content.append(Paragraph("Scan Results", styles['Heading2']))
         for result in results:
-            content.append(Paragraph(
-                f"Port: {result.get('port', 'N/A')}, State: {result.get('state', 'N/A')}", styles['Normal']))
+            lines = [
+                f"Port: {result.get('port', 'N/A')}",
+                f"State: {result.get('state', 'N/A')}",
+                f"Service: {result.get('service', 'N/A')}",
+                f"Protocol: {result.get('protocol', 'N/A')}",
+                f"Product: {result.get('product', '')}",
+                f"Version: {result.get('version', '')}",
+                f"Extra info: {result.get('extrainfo', '')}",
+                f"Banner: {result.get('banner', '')}",
+                f"CPE: {result.get('cpe', '')}",
+                f"Scripts: {', '.join(result.get('scripts', [])) if result.get('scripts') else ''}",
+            ]
+            content.append(Paragraph("<br/>".join(lines), styles['Normal']))
             content.append(Spacer(1, 12))
-
     doc.build(content)
     return report_filename
