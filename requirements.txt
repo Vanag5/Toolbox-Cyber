@@ -40,6 +40,8 @@ colorama==0.4.6
 cryptography==41.0.3
 beautifulsoup4==4.12.2
 requests
+psycopg2-binary==2.9.6
+Flask-SQLAlchemy==3.0.5
 
 # Authentification utilisateur avec gestion des sessions
 Flask-Login==0.6.3

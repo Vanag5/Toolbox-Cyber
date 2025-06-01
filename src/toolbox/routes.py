@@ -5,7 +5,6 @@ from .network_discovery import NetworkDiscovery
 from .service_enum import ServiceEnumerator
 from .logger import logger
 import traceback
-from gvm.protocols.gmp import Gmp
 from concurrent.futures import ThreadPoolExecutor
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -19,10 +18,13 @@ import uuid
 from typing import Dict
 from datetime import timedelta
 from .pdf_utils import generate_pdf_report
-from .scanner import get_vuln_scanner
-from toolbox.models import ScanResult
+from toolbox.models import ScanResult, SQLMapScanResult
 import json
 from flask_login import login_required
+from .tasks import run_sqlmap_scan
+from celery.result import AsyncResult
+from toolbox.celery import celery
+
 
 main_bp = Blueprint('main', __name__)
 report_bp = Blueprint('report', __name__, url_prefix='/report')
@@ -559,171 +561,6 @@ def get_logs(log_type):
             'message': str(e)
         }), 500
 
-@report_bp.route('/api/reports')
-def list_reports():
-    """List all scan reports"""
-    try:
-        report_type = request.args.get('type', 'all')
-        # Get OpenVAS reports
-        vuln_scanner = get_vuln_scanner()
-        with Gmp(connection=vuln_scanner.connection, transform=vuln_scanner.transform) as gmp:
-            gmp.authenticate(vuln_scanner.username, vuln_scanner.password)
-            reports = gmp.get_reports()
-
-            report_list = []
-            for report in reports.findall(".//report"):
-                if report_type == 'all' or report_type == 'vulnerability':
-                    report_list.append({
-                        'id': report.get('id'),
-                        'type': 'vulnerability',
-                        'target': report.find('.//host').text,
-                        'timestamp': report.find('.//timestamp').text,
-                        'severity': float(report.find('.//severity').text) if report.find('.//severity') is not None else 0.0
-                    })
-            return jsonify({
-                'status': 'success',
-                'reports': report_list
-            })
-    except Exception as e:
-        logger.log_error(
-            error_type='list_reports_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports/<report_id>')
-def get_report(report_id):
-    """Get a specific report"""
-    try:
-        vuln_scanner = get_vuln_scanner()
-        with Gmp(connection=vuln_scanner.connection, transform=vuln_scanner.transform) as gmp:
-            gmp.authenticate(vuln_scanner.username, vuln_scanner.password)
-            report = gmp.get_report(report_id)
-            results = vuln_scanner._parse_results(gmp, report_id)
-            return jsonify({
-                'status': 'success',
-                'report': {
-                    'id': report_id,
-                    'type': 'vulnerability',
-                    'target': report.find('.//host').text,
-                    'timestamp': report.find('.//timestamp').text,
-                    'results': [vars(r) for r in results]
-                }
-            })
-    except Exception as e:
-        logger.log_error(
-            error_type='get_report_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports/<report_id>', methods=['DELETE'])
-def delete_report(report_id):
-    """Delete a specific report"""
-    try:
-        vuln_scanner = get_vuln_scanner()
-        with Gmp(connection=vuln_scanner.connection, transform=vuln_scanner.transform) as gmp:
-            gmp.authenticate(vuln_scanner.username, vuln_scanner.password)
-            gmp.delete_report(report_id)
-            return jsonify({
-                'status': 'success',
-                'message': 'Report deleted successfully'
-            })
-    except Exception as e:
-        logger.log_error(
-            error_type='delete_report_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@report_bp.route('/api/reports/<report_id>/pdf')
-def get_report_pdf(report_id):
-    """Get a specific report in PDF format"""
-    try:
-        # Get the report data first
-        report_data = get_report(report_id).get_json()
-        if report_data['status'] != 'success':
-            return jsonify(report_data), 500
-        # Create PDF
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72,
-                                leftMargin=72, topMargin=72, bottomMargin=18)
-        # Prepare report content
-        content = []
-        styles = getSampleStyleSheet()
-        # Title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=24,
-            spaceAfter=30
-        )
-        content.append(Paragraph("Nmap Scan Report", title_style))
-        content.append(Spacer(1, 12))
-        # Report Details
-        report = report_data['report']
-        details = [
-            ["Report ID:", report['id']],
-            ["Type:", report['type']],
-            ["Target:", report['target']],
-            ["Timestamp:", report['timestamp']]
-        ]
-        t = Table(details)
-        t.setStyle(TableStyle([
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 12),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-            ('PADDING', (0, 0), (-1, -1), 6),
-        ]))
-        content.append(t)
-        content.append(Spacer(1, 20))
-        # Results
-        if report.get('results'):
-            content.append(Paragraph("Scan Results", styles['Heading2']))
-            content.append(Spacer(1, 12))
-            for result in report['results']:
-                result_text = f"""
-                Port: {result.get('port', 'N/A')}
-                State: {result.get('state', 'N/A')}
-                Service: {result.get('service', 'N/A')}
-                Version: {result.get('version', 'N/A')}
-                Protocol: {result.get('protocol', 'N/A')}
-                """
-                content.append(Paragraph(result_text, styles['Normal']))
-                content.append(Spacer(1, 12))
-        # Build PDF
-        doc.build(content)
-        buffer.seek(0)
-        return send_file(
-            buffer,
-            as_attachment=True,
-            download_name=f"nmap_scan_report_{report_id}.pdf",
-            mimetype='application/pdf'
-        )
-    except Exception as e:
-        logger.log_error(
-            error_type='get_report_pdf_error',
-            error_message=str(e),
-            stack_trace=traceback.format_exc()
-        )
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
 def generate_nmap_pdf_report(scan_data: Dict, output_dir: str = '/app/scan_reports') -> str:
     """
     Generate a PDF report for an Nmap scan
@@ -853,3 +690,185 @@ def get_scan_status(scan_id):
             'status': 'error',
             'message': str(e)
         }), 500
+
+@scan_bp.route('/sqlmap/status/<task_id>', methods=['GET'])
+def sqlmap_status(task_id):
+    task_result = AsyncResult(task_id, app=celery)
+    response = {
+        "task_id": task_id,
+        "state": task_result.state,
+        "info": task_result.info  # peut contenir message ou progression
+    }
+    return jsonify(response)
+
+@scan_bp.route('/sqlmap/result/<sqlmap_id>', methods=['GET'])
+def get_result(sqlmap_id):
+    result = SQLMapScanResult.query.filter_by(task_id=sqlmap_id, task_type='sqlmap').first()
+    if result:
+        return jsonify({
+            "url": result.target_url,
+            "output": result.raw_output,
+            "timestamp": result.timestamp.isoformat()
+        })
+    return jsonify({"error": "Not found"}), 404
+
+@scan_bp.route('/sqlmap', methods=['POST'])
+def sqlmap_scan():
+    try:
+        data = request.get_json()
+        url = data.get("url")
+        method = data.get("method", "GET")
+        post_data = data.get("data")
+        level = int(data.get("level", 1))
+        risk = int(data.get("risk", 1))
+        additional_args = data.get("additional_args", "")
+        enable_forms_crawl = data.get("enableFormsCrawl", False)
+
+        if not url:
+            return jsonify({"error": "URL is required"}), 400
+
+        task = run_sqlmap_scan.delay(
+            url=url,
+            method=method.upper(),
+            data=post_data,
+            level=level,
+            risk=risk,
+            additional_args=additional_args,
+            enable_forms_crawl=enable_forms_crawl,
+            use_tamper=True
+        )
+
+        return jsonify({
+            "message": "SQLMap scan launched",
+            "task_id": task.id
+        }), 202
+
+    except Exception as e:
+        current_app.logger.exception("Erreur lors du lancement du scan SQLMap")
+        return jsonify({"error": str(e)}), 500
+
+
+@scan_bp.route('/sqlmap/<task_id>/report', methods=['GET'])
+def download_sqlmap_report(task_id):
+    try:
+        # Exemple : recherche du scan SQLMap en base
+        scan = SQLMapScanResult.query.filter_by(task_id=task_id).first()
+        if not scan:
+            return jsonify({'status': 'error', 'message': 'Scan not found'}), 404
+
+        if getattr(scan, 'results_json', None):
+            try:
+                results = json.loads(scan.results_json)
+            except json.JSONDecodeError:
+                results = []
+        else:
+            # On tente de parser raw_output (chaîne JSON brute) si disponible
+            if scan.raw_output:
+                try:
+                    results = json.loads(scan.raw_output)
+                except json.JSONDecodeError:
+                    results = []
+            else:
+                results = []
+
+        scan_data = {
+            'scan_type': 'sqlmap',
+            'target': scan.target_url,
+            'timestamp': scan.timestamp.isoformat(),
+            'results': results,
+            'summary': {
+                'total_vulnerabilities': len(results),
+                'dbms_list': list({r.get('dbms', 'Inconnu') for r in results if isinstance(results, list) and r.get('dbms')})
+            }
+        }
+
+        # Fonction à créer similaire à generate_pdf_report mais pour SQLMap
+        report_path = generate_sqlmap_pdf_report(scan_data)
+
+        return send_file(
+            report_path,
+            as_attachment=True,
+            download_name=f"sqlmap_scan_report_{task_id}.pdf"
+        )
+
+    except Exception as e:
+        logger.log_error(
+            error_type='sqlmap_report_download_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+def generate_sqlmap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_reports') -> str:
+    """
+    Generate a PDF report for a SQLMap scan
+    :param scan_data: Dictionary containing scan information (target, timestamp, results, summary)
+    :param output_dir: Directory to save the PDF report
+    :return: Path to the generated PDF report
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    report_filename = f"{output_dir}/sqlmap_scan_{uuid.uuid4().hex[:8]}.pdf"
+    doc = SimpleDocTemplate(report_filename, pagesize=letter,
+                            rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    content = []
+    styles = getSampleStyleSheet()
+
+    # Title
+    title = Paragraph(f"SQLMap Scan Report for {scan_data.get('target', 'Unknown Target')}", styles['Title'])
+    content.append(title)
+
+    # Scan Details
+    details = [
+        ['Scan Type', scan_data.get('scan_type', 'Unknown')],
+        ['Target', scan_data.get('target', 'Unknown')],
+        ['Timestamp', scan_data.get('timestamp', 'Unknown')]
+    ]
+    details_table = Table(details, colWidths=[2*inch, 4*inch])
+    details_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    content.append(details_table)
+
+    # Results Table (adapted to typical SQLMap output)
+    results = scan_data.get('results', [])
+    if results:
+        results_data = [['Parameter', 'Vulnerability Type', 'Payload Example', 'DBMS']]
+        for res in results:
+            results_data.append([
+                res.get('parameter', 'N/A'),
+                res.get('vulnerability', 'N/A'),
+                res.get('payload', 'N/A'),
+                res.get('dbms', 'N/A')
+            ])
+        results_table = Table(results_data, colWidths=[1.5*inch, 3*inch, 2*inch, 1*inch])
+        results_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        content.append(Paragraph("Detected Vulnerabilities", styles['Heading2']))
+        content.append(results_table)
+
+    # Summary (optionnel, selon ce que tu stockes)
+    summary = scan_data.get('summary', {})
+    summary_text = Paragraph(
+        f"Total Vulnerabilities Found: {summary.get('total_vulnerabilities', len(results))}<br/>" +
+        f"DBMS Detected: {', '.join(summary.get('dbms_list', [])) if summary.get('dbms_list') else 'N/A'}",
+        styles['Normal']
+    )
+    content.append(summary_text)
+
+    doc.build(content)
+    return report_filename

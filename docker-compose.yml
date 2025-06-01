@@ -8,6 +8,8 @@ services:
     environment:
     - FLASK_DEBUG=1
     - PYTHONPATH=/src
+    - CELERY_BROKER_URL=redis://redis:6379/0
+    - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
     - ./src:/src
     working_dir: /src
@@ -17,15 +19,16 @@ services:
       - minio
       - celery
 
-  
-
   celery:
     build: .
-    command: celery -A toolbox.tasks worker --loglevel=info
+    command: celery -A toolbox.celery_worker.celery worker --loglevel=info
     environment:
       - PYTHONPATH=/src
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./src:/src
+      - ./scan_reports:/scan_reports
     depends_on:
       - redis
       - db

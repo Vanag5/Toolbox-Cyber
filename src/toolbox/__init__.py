@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
+from .celery import celery, init_celery
 
 # Initialisation des extensions globales
 db = SQLAlchemy()
@@ -10,11 +11,13 @@ login_manager = LoginManager()
 # Redirige vers /login si l'utilisateur n'est pas connecté
 login_manager.login_view = 'auth.login'
 
+
 def create_app():
     app = Flask(__name__)
     # Vérifie que ce chemin est correct
     app.config.from_object('toolbox.config.Config')
-
+    print("Config keys:", app.config.keys())
+    print("CELERY_BROKER_URL:", app.config.get('CELERY_BROKER_URL'))
     # Initialisation des extensions avec l'application
     db.init_app(app)
     migrate.init_app(app, db)
@@ -39,5 +42,7 @@ def create_app():
             return User.query.get(int(user_id))
         except (ValueError, TypeError):
             return None
+
+    init_celery(app) 
 
     return app

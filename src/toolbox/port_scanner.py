@@ -10,7 +10,7 @@ import subprocess
 import time
 from datetime import datetime, timedelta
 from libnmap.parser import NmapParser
-from .models import ScanResult
+from .models import ScanResult, SQLMapScanResult
 from toolbox import db
 import uuid
 
@@ -246,6 +246,7 @@ class PortScanner:
             # Log pour vérifier les options utilisées
             self.logger.info(f"Scan initiated: {scan_id} (Type: {scan_type})")
             self.logger.info(f"Options Nmap utilisées pour {scan_id}: {options}")
+            
             # Start the scan in a separate thread
             def run_scan():
                 try:
@@ -312,11 +313,11 @@ class PortScanner:
                         'error': str(e),
                         'results': [],
                         'progress': {
-                        'total_hosts': 1,
-                        'scanned_hosts': 0,
-                        'current_host': None,
-                        'estimated_completion_time': None,
-                        'percentage': 0
+                            'total_hosts': 1,
+                            'scanned_hosts': 0,
+                            'current_host': None,
+                            'estimated_completion_time': None,
+                            'percentage': 0
                         }
                     })
                 else:
@@ -399,6 +400,64 @@ class PortScanner:
         self.logger.info(
             f"Scan status for {scan_id}: {current_scan['status']}")
         return current_scan
+    
+    def run_sqlmap_scan(self, url: str, data: Optional[str] = None, method: str = 'GET',
+                        level: int = 5, risk: int = 3, additional_args: str = "", enable_forms_crawl: bool = False, use_tamper: bool = True) -> Dict:
+        try:
+            scan_id = f"sqlmap_{hash(url + str(time.time()))}"
+            output_file = f"/tmp/{scan_id}_output.txt"
+
+            cmd = [
+                "sqlmap",
+                "-u", url,
+                "--batch",
+                "--level", str(level),
+                "--risk", str(risk),
+                "--smart",
+                "--technique=U",
+                "--dbs",
+                "--random-agent",
+            ]
+
+            if enable_forms_crawl and "--forms" not in additional_args.lower():
+                cmd.append("--forms")
+            
+            if use_tamper:
+                cmd.append("--tamper=space2comment")
+
+            if method.upper() == "POST" and data:
+                cmd += ["--data", data]
+
+            if additional_args:
+                cmd += additional_args.strip().split()
+
+            cmd += ["--output-dir", f"/tmp/{scan_id}"]
+
+            self.logger.info(f"Lancement de SQLMap: {' '.join(cmd)}")
+            self.logger.info(f"Args supplémentaires : {additional_args}")
+
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=400)
+
+            output = process.stdout + "\n" + process.stderr
+
+            with open(output_file, 'w') as f:
+                f.write(output)
+
+            self.logger.info(f"SQLMap terminé. Résultat enregistré dans {output_file}")
+
+            return {
+                "scan_id": scan_id,
+                "status": "completed",
+                "output": output,
+                "output_file": output_file
+            }
+
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"SQLMap timeout pour URL: {url}")
+            return {"status": "timeout", "scan_id": scan_id}
+        except Exception as e:
+            self.logger.error(f"Erreur SQLMap: {e}")
+            return {"status": "error", "error": str(e), "scan_id": scan_id}
 
 def save_scan_result(app, scan_id, target, scan_type, results):
     logger = logging.getLogger("toolbox.port_scanner")
@@ -436,3 +495,15 @@ def save_scan_result(app, scan_id, target, scan_type, results):
             logger.error(f"[ERROR] save_scan_result: {e}")
             logger.error(traceback.format_exc())
             print(traceback.format_exc())
+
+def save_sqlmap_result(app, scan_id, url, method, output_file, raw_output):
+    with app.app_context():
+        result = SQLMapScanResult(
+            scan_id=scan_id,
+            target_url=url,
+            method=method,
+            output_file=output_file,
+            raw_output=raw_output
+        )
+        db.session.add(result)
+        db.session.commit()
