@@ -872,3 +872,4 @@ def generate_sqlmap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_rep
 
     doc.build(content)
     return report_filename
+
