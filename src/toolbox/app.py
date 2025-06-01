@@ -24,13 +24,14 @@ NMAP_SCAN_PROFILES = {
 # In-memory storage for active scans and reports
 active_scans = {}
 scan_reports = {}
-# Error handlers
 
+# Routes to trigger Celery tasks
 @app.errorhandler(404)
 def not_found_error(error):
     if request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'status': 'error', 'message': 'Resource not found'}), 404
     return render_template('error.html', error={'code': 404, 'message': 'Resource not found'}), 404
+
 
 @app.errorhandler(500)
 def internal_error(error):

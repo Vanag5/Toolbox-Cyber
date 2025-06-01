@@ -18,9 +18,13 @@ import uuid
 from typing import Dict
 from datetime import timedelta
 from .pdf_utils import generate_pdf_report
-from toolbox.models import ScanResult
+from toolbox.models import ScanResult, SQLMapScanResult
 import json
 from flask_login import login_required
+from .tasks import run_sqlmap_scan
+from celery.result import AsyncResult
+from toolbox.celery import celery
+
 
 main_bp = Blueprint('main', __name__)
 report_bp = Blueprint('report', __name__, url_prefix='/report')
@@ -686,3 +690,186 @@ def get_scan_status(scan_id):
             'status': 'error',
             'message': str(e)
         }), 500
+
+@scan_bp.route('/sqlmap/status/<task_id>', methods=['GET'])
+def sqlmap_status(task_id):
+    task_result = AsyncResult(task_id, app=celery)
+    response = {
+        "task_id": task_id,
+        "state": task_result.state,
+        "info": task_result.info  # peut contenir message ou progression
+    }
+    return jsonify(response)
+
+@scan_bp.route('/sqlmap/result/<sqlmap_id>', methods=['GET'])
+def get_result(sqlmap_id):
+    result = SQLMapScanResult.query.filter_by(task_id=sqlmap_id, task_type='sqlmap').first()
+    if result:
+        return jsonify({
+            "url": result.target_url,
+            "output": result.raw_output,
+            "timestamp": result.timestamp.isoformat()
+        })
+    return jsonify({"error": "Not found"}), 404
+
+@scan_bp.route('/sqlmap', methods=['POST'])
+def sqlmap_scan():
+    try:
+        data = request.get_json()
+        url = data.get("url")
+        method = data.get("method", "GET")
+        post_data = data.get("data")
+        level = int(data.get("level", 1))
+        risk = int(data.get("risk", 1))
+        additional_args = data.get("additional_args", "")
+        enable_forms_crawl = data.get("enableFormsCrawl", False)
+
+        if not url:
+            return jsonify({"error": "URL is required"}), 400
+
+        task = run_sqlmap_scan.delay(
+            url=url,
+            method=method.upper(),
+            data=post_data,
+            level=level,
+            risk=risk,
+            additional_args=additional_args,
+            enable_forms_crawl=enable_forms_crawl,
+            use_tamper=True
+        )
+
+        return jsonify({
+            "message": "SQLMap scan launched",
+            "task_id": task.id
+        }), 202
+
+    except Exception as e:
+        current_app.logger.exception("Erreur lors du lancement du scan SQLMap")
+        return jsonify({"error": str(e)}), 500
+
+
+@scan_bp.route('/sqlmap/<task_id>/report', methods=['GET'])
+def download_sqlmap_report(task_id):
+    try:
+        # Exemple : recherche du scan SQLMap en base
+        scan = SQLMapScanResult.query.filter_by(task_id=task_id).first()
+        if not scan:
+            return jsonify({'status': 'error', 'message': 'Scan not found'}), 404
+
+        if getattr(scan, 'results_json', None):
+            try:
+                results = json.loads(scan.results_json)
+            except json.JSONDecodeError:
+                results = []
+        else:
+            # On tente de parser raw_output (chaîne JSON brute) si disponible
+            if scan.raw_output:
+                try:
+                    results = json.loads(scan.raw_output)
+                except json.JSONDecodeError:
+                    results = []
+            else:
+                results = []
+
+        scan_data = {
+            'scan_type': 'sqlmap',
+            'target': scan.target_url,
+            'timestamp': scan.timestamp.isoformat(),
+            'results': results,
+            'summary': {
+                'total_vulnerabilities': len(results),
+                'dbms_list': list({r.get('dbms', 'Inconnu') for r in results if isinstance(results, list) and r.get('dbms')})
+            }
+        }
+
+        # Fonction à créer similaire à generate_pdf_report mais pour SQLMap
+        report_path = generate_sqlmap_pdf_report(scan_data)
+
+        return send_file(
+            report_path,
+            as_attachment=True,
+            download_name=f"sqlmap_scan_report_{task_id}.pdf"
+        )
+
+    except Exception as e:
+        logger.log_error(
+            error_type='sqlmap_report_download_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+def generate_sqlmap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_reports') -> str:
+    """
+    Generate a PDF report for a SQLMap scan
+    :param scan_data: Dictionary containing scan information (target, timestamp, results, summary)
+    :param output_dir: Directory to save the PDF report
+    :return: Path to the generated PDF report
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    report_filename = f"{output_dir}/sqlmap_scan_{uuid.uuid4().hex[:8]}.pdf"
+    doc = SimpleDocTemplate(report_filename, pagesize=letter,
+                            rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    content = []
+    styles = getSampleStyleSheet()
+
+    # Title
+    title = Paragraph(f"SQLMap Scan Report for {scan_data.get('target', 'Unknown Target')}", styles['Title'])
+    content.append(title)
+
+    # Scan Details
+    details = [
+        ['Scan Type', scan_data.get('scan_type', 'Unknown')],
+        ['Target', scan_data.get('target', 'Unknown')],
+        ['Timestamp', scan_data.get('timestamp', 'Unknown')]
+    ]
+    details_table = Table(details, colWidths=[2*inch, 4*inch])
+    details_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    content.append(details_table)
+
+    # Results Table (adapted to typical SQLMap output)
+    results = scan_data.get('results', [])
+    if results:
+        results_data = [['Parameter', 'Vulnerability Type', 'Payload Example', 'DBMS']]
+        for res in results:
+            results_data.append([
+                res.get('parameter', 'N/A'),
+                res.get('vulnerability', 'N/A'),
+                res.get('payload', 'N/A'),
+                res.get('dbms', 'N/A')
+            ])
+        results_table = Table(results_data, colWidths=[1.5*inch, 3*inch, 2*inch, 1*inch])
+        results_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        content.append(Paragraph("Detected Vulnerabilities", styles['Heading2']))
+        content.append(results_table)
+
+    # Summary (optionnel, selon ce que tu stockes)
+    summary = scan_data.get('summary', {})
+    summary_text = Paragraph(
+        f"Total Vulnerabilities Found: {summary.get('total_vulnerabilities', len(results))}<br/>" +
+        f"DBMS Detected: {', '.join(summary.get('dbms_list', [])) if summary.get('dbms_list') else 'N/A'}",
+        styles['Normal']
+    )
+    content.append(summary_text)
+
+    doc.build(content)
+    return report_filename
+

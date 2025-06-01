@@ -168,6 +168,18 @@ class PentestLogger:
             self.log_error('log_retrieval_error', str(e))
             return []
 
+    def error(self, msg: str, *args, **kwargs):
+        self.loggers['error'].error(msg, *args, **kwargs)
+
+    def info(self, msg: str, *args, **kwargs):
+        self.loggers['debug'].info(msg, *args, **kwargs)
+
+    def warning(self, msg: str, *args, **kwargs):
+        self.loggers['debug'].warning(msg, *args, **kwargs)
+
+    def debug(self, msg: str, *args, **kwargs):
+        self.loggers['debug'].debug(msg, *args, **kwargs)    
+
 
 # Initialize global logger instance
 logger = PentestLogger()

@@ -31,6 +31,7 @@ class ScanManager {
     }
 
     startScan(endpoint, data) {
+        console.log('startScan called with endpoint:', endpoint, 'and data:', data);
         fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -166,6 +167,85 @@ class ScanManager {
             </a>
         `).join(' ');
     }
+
+    startSqlmapScan(data) {
+        fetch('/scan/sqlmap', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.task_id) {
+                this.activeScanId = data.task_id;
+                showAlert('SQLMap scan started', 'success');
+                this.pollSqlmapResult();
+                const resultsModal = document.getElementById('resultsModal');
+                    if (resultsModal) {
+                        const modal = new bootstrap.Modal(resultsModal);
+                        modal.show();
+                    }
+            } else {
+                showAlert(data.error || 'Failed to start SQLMap scan', 'danger');
+            }
+        })
+        .catch(err => showAlert('Error starting SQLMap scan: ' + err, 'danger'));
+    }
+
+    pollSqlmapResult() {
+    if (!this.activeScanId) return;
+
+    const progressBar = document.querySelector('.progress-bar');
+    const statusDiv = document.getElementById('scanStatus');
+    const downloadBtn = document.getElementById('downloadResultsBtn');
+    const scanResults = document.getElementById('scanResults');
+    const scanTypeBadge = document.getElementById('scanType');
+    const scanTargetBadge = document.getElementById('scanTarget');
+
+    // Affiche le type de scan et la cible dans la modale
+    scanTypeBadge.textContent = 'SQLMap Scan';
+    scanTargetBadge.textContent = document.getElementById('sqlmapTarget').value;
+
+    this.updateInterval = setInterval(() => {
+        fetch(`/scan/sqlmap/result/${this.activeScanId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    // Pas encore prêt, on affiche un message et on continue le polling
+                    statusDiv.textContent = 'Scan en cours...';
+                    progressBar.style.width = '50%';  // Tu peux adapter la valeur
+                    progressBar.textContent = 'En cours';
+                    console.log('Waiting for SQLMap result...');
+                } else {
+                    // Résultat prêt, on affiche tout
+                    statusDiv.textContent = 'Scan terminé';
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+
+                    // Affiche le résultat brut dans la modale
+                    scanResults.textContent = data.output || JSON.stringify(data, null, 2);
+
+                    // Active le bouton téléchargement
+                    if (downloadBtn) {
+                        downloadBtn.disabled = false;
+                        // Par exemple : ouvre un fichier / endpoint spécifique ou télécharge les données
+                        downloadBtn.onclick = () => {
+                            // Si tu as une route pour récupérer un rapport au format fichier
+                            window.open(`/scan/sqlmap/${this.activeScanId}/report`, '_blank');
+                            // Sinon, tu peux aussi générer un fichier à la volée (plus complexe)
+                        };
+                    }
+
+                    // Stop le polling car le scan est terminé
+                    this.stopMonitoring();
+                }
+            })
+            .catch(err => {
+                showAlert('Error polling SQLMap result: ' + err, 'danger');
+                this.stopMonitoring();
+            });
+    }, 5000); 
+}
 }
 
 // Initialize scan manager
@@ -176,8 +256,9 @@ const API_ENDPOINTS = {
     vulnerabilityScan: '/scan/vulnerability/scan',
     networkDiscovery: '/scan/network/discover',
     portScan: '/scan/ports',
-    scanStatus: '/scan/nmap/<scan_id>/status',      // <-- adapte ce endpoint selon ton backend
-    scanReport: '/scan/nmap/<scan_id>/report'       // <-- adapte ce endpoint selon ton backend
+    scanStatus: '/scan/nmap/<scan_id>/status',      
+    scanReport: '/scan/nmap/<scan_id>/report',       
+    sqlmap: '/scan/sqlmap'
 };
 
 // Event listeners
@@ -185,17 +266,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('downloadResultsBtn');
     if (downloadBtn) downloadBtn.disabled = true;
 
-    function handleFormSubmit(formId, endpoint, dataExtractor) {
+    function handleFormSubmit(formId, endpoint, dataExtractor, customStartFn) {
         const form = document.getElementById(formId);
         if (form) {
             form.addEventListener('submit', e => {
                 e.preventDefault();
                 const formData = dataExtractor();
-                scanManager.startScan(endpoint, formData);
+                if (typeof customStartFn === 'function') {
+                    customStartFn(formData);
+                } else {
+                    scanManager.startScan(endpoint, formData);
+                }
             });
         }
-    }
-
+    }    
     const forms = [
      
         { id: 'networkScanForm', endpoint: API_ENDPOINTS.networkDiscovery, dataExtractor: () => ({
@@ -217,10 +301,38 @@ document.addEventListener('DOMContentLoaded', () => {
         options: document.getElementById('nmapOptions').value === 'custom'
             ? document.getElementById('nmapCustomOptions').value
             : document.getElementById('nmapOptions').value
-        }) }
+        }) },
+        { id: 'sqlmapForm', endpoint: '/scan/sqlmap', dataExtractor: () => ({
+        url: document.getElementById('sqlmapTarget').value,
+        level: parseInt(document.getElementById('sqlmapLevel').value),
+        risk: parseInt(document.getElementById('sqlmapRisk').value),
+        additional_args: document.getElementById('sqlmapArgs').value,
+        options: document.getElementById('sqlmapArgs').value
+        }) 
+        }
     ];
 
     forms.forEach(({ id, endpoint, dataExtractor }) => {
-        handleFormSubmit(id, endpoint, dataExtractor);
+        if (id === 'sqlmapForm') {
+            handleFormSubmit(id, endpoint, dataExtractor, (formData) => {
+                scanManager.startSqlmapScan(formData);
+            });
+        } else {
+            handleFormSubmit(id, endpoint, dataExtractor);
+        }
     });
+    const enableFormsCrawl = document.getElementById('enableFormsCrawl');
+    const sqlmapArgsInput = document.getElementById('sqlmapArgs');
+    let previousSqlmapArgs = '';
+
+    if (enableFormsCrawl && sqlmapArgsInput) {
+        enableFormsCrawl.addEventListener('change', () => {
+            if (enableFormsCrawl.checked) {
+                previousSqlmapArgs = sqlmapArgsInput.value;
+                sqlmapArgsInput.value = '--forms --crawl=2';
+            } else {
+                sqlmapArgsInput.value = previousSqlmapArgs;
+            }
+        });
+    }
 });

@@ -30,3 +30,6 @@ class Config:
     # API Configuration
     API_RATE_LIMIT = int(os.getenv('API_RATE_LIMIT', '100')
                          )  # requests per minute
+
+    CELERY_BROKER_URL = 'redis://localhost:6379/0'
+    CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'

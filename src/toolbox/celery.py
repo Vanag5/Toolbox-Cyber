@@ -1,23 +1,18 @@
 from celery import Celery
 
+celery = Celery('toolbox')
 
-def create_celery():
-    celery = Celery(
-        'pentest_toolbox',
-        broker='redis://redis:6379/0',
-        backend='redis://redis:6379/0',
-        include=['tasks']
-    )
-
+def init_celery(app):
     celery.conf.update(
-        task_serializer='json',
-        accept_content=['json'],
-        result_serializer='json',
-        timezone='UTC',
-        enable_utc=True,
+        broker_url=app.config['CELERY_BROKER_URL'],
+        result_backend=app.config['CELERY_RESULT_BACKEND']
     )
 
-    return celery
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
 
+    celery.Task = ContextTask
 
-celery = create_celery()
+    import toolbox.tasks  # ← ce point est CRUCIAL
