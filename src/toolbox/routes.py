@@ -24,7 +24,9 @@ from flask_login import login_required
 from .tasks import run_sqlmap_scan
 from celery.result import AsyncResult
 from toolbox.celery import celery
-
+from .hydra_scanner import HydraScanner
+from .tasks import run_hydra_scan
+from toolbox import db
 
 main_bp = Blueprint('main', __name__)
 report_bp = Blueprint('report', __name__, url_prefix='/report')
@@ -872,4 +874,281 @@ def generate_sqlmap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_rep
 
     doc.build(content)
     return report_filename
+
+
+@scan_bp.route('/hydra', methods=['POST'])
+def hydra_scan():
+    """Endpoint to perform Hydra brute force scan"""
+    try:
+        data = request.get_json()
+        if not data or 'target' not in data or 'service' not in data:
+            return jsonify({'error': 'target and service are required'}), 400
+        
+        target = data['target']
+        service = data['service']  # ex. : ssh, http-post-form, ftp
+        username = data.get('username')
+        password = data.get('password')
+        user_list = data.get('user_list')  # Chemin vers un fichier de liste d'utilisateurs
+        pass_list = data.get('pass_list')  # Chemin vers un fichier de liste de mots de passe
+        options = data.get('options', {})  # Options supplémentaires (ex. : {'-t': 4} pour 4 threads)
+        
+        import os
+
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'wordlists'))
+
+        if user_list:
+            user_list_path = os.path.join(base_path, user_list)
+        else:
+            user_list_path = None
+
+        if pass_list:
+            pass_list_path = os.path.join(base_path, pass_list)
+        else:
+            pass_list_path = None
+
+
+        form_path = None
+        if service == 'http-post-form':
+            form_path = data.get('formPath')
+            if not form_path:
+                return jsonify({'error': 'formPath is required for service http-post-form'}), 400
+
+        scan_id = f"hydra_{target}_{int(datetime.now().timestamp())}"
+        
+        import os
+
+        if user_list_path and not os.path.isfile(user_list_path):
+            return jsonify({'error': f'user_list file not found: {user_list_path}'}), 400
+
+        if pass_list_path and not os.path.isfile(pass_list_path):
+            return jsonify({'error': f'pass_list file not found: {pass_list_path}'}), 400
+
+        #Start scan asynchronously via Celery
+        task = run_hydra_scan.delay(target, service, username, password, user_list_path, pass_list_path, options, form_path)
+
+        # Store initial scan info
+        active_scans[scan_id] = {
+            'target': target,
+            'type': f'hydra_{service}',
+            'status': 'running',
+            'start_time': datetime.now().isoformat(),
+            'end_time': None,
+            'task_id': task.id   # <-- ici tu stockes l'ID de la tâche Celery
+        }
+                
+        # Log scan initiation
+        logger.log_scan(
+            scan_type=f'hydra_{service}',
+            target=target,
+            results={'status': 'initiated', 'scan_id': scan_id}
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan_id,
+            'task_id': task.id,
+            'message': f'Hydra scan started for {target} on {service}'
+        }), 202
+    except Exception as e:
+        logger.log_error(
+            error_type='hydra_scan_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@scan_bp.route('/hydra/status/<path:scan_id>', methods=['GET'])
+def hydra_scan_status(scan_id):
+    """Check the status of an Hydra scan"""
+    try:
+        scan_data = active_scans.get(scan_id)
+        if not scan_data:
+            logger.log_error(
+                error_type='hydra_scan_status_error',
+                error_message=f'Scan not found: {scan_id}'
+            )
+            return jsonify({
+                'status': 'error',
+                'message': 'Scan not found',
+                'scan_id': scan_id
+            }), 404
+        
+        # Check Celery task status
+        task_id = scan_data.get('task_id')
+        task_result = AsyncResult(task_id, app=celery)
+        
+        response = {
+            'status': 'success',
+            'scan': {
+                'id': scan_id,
+                'target': scan_data.get('target', 'Unknown'),
+                'type': scan_data.get('type', 'hydra'),
+                'current_status': scan_data.get('status', 'unknown'),
+                'start_time': scan_data.get('start_time', 'N/A'),
+                'end_time': scan_data.get('end_time', 'N/A'),
+                'task_status': task_result.state,
+                'task_info': task_result.info if task_result.info else {}
+            },
+            'report_id': None
+        }
+        
+        if task_result.state == 'SUCCESS':
+            scan_data['status'] = 'completed'
+            scan_data['end_time'] = datetime.now().isoformat()
+            active_scans[scan_id] = scan_data
+
+            result = task_result.result
+            response['scan']['results'] = result.get('results', [])
+            response['report_id'] = f"report_{scan_id}"
+
+            existing = ScanResult.query.filter_by(scan_id=scan_id).first()
+            if not existing:
+                try:
+                    new_scan = ScanResult(
+                        scan_id=scan_id,
+                        scan_type=scan_data.get('type', 'hydra'),
+                        target=scan_data.get('target'),
+                        timestamp=datetime.now(),
+                        results_json=json.dumps(result.get('results', [])),
+                        summary_json=json.dumps(result.get('summary', {}))
+                    )
+                    db.session.add(new_scan)
+                    db.session.commit()
+
+                    logger.log_info(f"Hydra scan {scan_id} enregistré en base.")
+                except Exception as db_error:
+                    logger.log_error(
+                        error_type='db_insert_error',
+                        error_message=str(db_error),
+                        stack_trace=traceback.format_exc()
+                    )
+
+        return jsonify(response)
+
+    except Exception as e:
+        logger.log_error(
+            error_type='hydra_scan_status_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'scan_id': scan_id
+        }), 500
+
+
+@scan_bp.route('/hydra/<path:scan_id>/report', methods=['GET'])
+def download_hydra_report(scan_id):
+    """Download Hydra scan report as PDF"""
+    try:
+        scan = ScanResult.query.filter_by(scan_id=scan_id).first()
+        if not scan:
+            return jsonify({'status': 'error', 'message': 'Scan not found'}), 404
+        
+        scan_data = {
+            'scan_type': scan.scan_type,
+            'target': scan.target,
+            'timestamp': scan.timestamp.isoformat(),
+            'results': json.loads(scan.results_json) if scan.results_json else [],
+            'summary': json.loads(scan.summary_json) if scan.summary_json else {}
+        }
+        
+        report_path = generate_hydra_pdf_report(scan_data)
+        return send_file(
+            report_path,
+            as_attachment=True,
+            download_name=f"hydra_scan_report_{scan_id}.pdf"
+        )
+    except Exception as e:
+        logger.log_error(
+            error_type='hydra_report_download_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+    
+def generate_hydra_pdf_report(scan_data: dict, output_dir: str = '/app/scan_reports') -> str:
+    """Generate a PDF report for hydra"""
+    os.makedirs(output_dir, exist_ok=True)
+    report_filename = f"{output_dir}/{scan_data.get('scan_type', 'scan')}_{uuid.uuid4().hex[:8]}.pdf"
+    doc = SimpleDocTemplate(report_filename, pagesize=letter,
+                            rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    content = []
+    styles = getSampleStyleSheet()
+
+    # Title
+    title = Paragraph(f"{scan_data.get('scan_type', 'Scan')} Report for {scan_data.get('target', 'Unknown Target')}", styles['Title'])
+    content.append(title)
+
+    # Scan Details
+    details = [
+        ['Scan Type', scan_data.get('scan_type', 'Unknown')],
+        ['Target', scan_data.get('target', 'Unknown')],
+        ['Timestamp', scan_data.get('timestamp', 'Unknown')]
+    ]
+    details_table = Table(details, colWidths=[2*inch, 4*inch])
+    details_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    content.append(details_table)
+
+    # Results Table
+    results = scan_data.get('results', [])
+    if results:
+        if 'hydra' in scan_data.get('scan_type', '').lower():
+            results_data = [['Host', 'Login', 'Password', 'Success']]
+            for result in results:
+                results_data.append([
+                    result.get('host', 'N/A'),
+                    result.get('login', 'N/A'),
+                    result.get('password', 'N/A'),
+                    str(result.get('success', 'N/A'))
+                ])
+            col_widths = [1.5*inch, 1.5*inch, 2*inch, 1*inch]
+        else:
+            results_data = [['Key', 'Value']]
+            for result in results:
+                for k, v in result.items():
+                    results_data.append([str(k), str(v)])
+            col_widths = [2*inch, 4*inch]
+
+        results_table = Table(results_data, colWidths=col_widths)
+        results_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        content.append(Paragraph("Scan Results", styles['Heading2']))
+        content.append(results_table)
+
+    # Summary
+    summary = scan_data.get('summary', {})
+    summary_text = Paragraph(
+        f"Total Items: {summary.get('total_attempts', summary.get('total_ports', summary.get('total_hosts', len(results))))}<br/>"
+        f"Successful/Open: {summary.get('successful_logins', summary.get('open_ports', summary.get('total_vulnerabilities', 0)))}",
+        styles['Normal']
+    )
+    content.append(summary_text)
+
+    doc.build(content)
+    return report_filename    
 

@@ -28,15 +28,19 @@ class ScanManager {
     constructor() {
         this.activeScanId = null;
         this.updateInterval = null;
+        this.scanType = null;  // Ajouté pour tracker le type de scan actif
     }
 
-    startScan(endpoint, data) {
-        console.log('startScan called with endpoint:', endpoint, 'and data:', data);
+    startHydraScan(data) {
+        this.startScan('/scan/hydra', data, 'hydra');
+    }
+
+    startScan(endpoint, data, scanType = 'nmap') {
+        console.log('startScan called with endpoint:', endpoint, 'and data:', data, 'type:', scanType);
+        this.scanType = scanType;
         fetch(endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         })
         .then(response => response.json())
@@ -44,7 +48,7 @@ class ScanManager {
             if (data.status === 'success') {
                 this.activeScanId = data.scan_id;
                 showAlert('Scan started successfully', 'success');
-                console.log("Appel monitorProgress pour scan_id:", this.activeScanId);
+                console.log("Appel monitorProgress pour scan_id :", this.activeScanId);
                 this.monitorProgress();
                 const resultsModal = document.getElementById('resultsModal');
                 if (resultsModal) {
@@ -56,19 +60,54 @@ class ScanManager {
             }
         })
         .catch(error => {
-            showAlert('Error starting scan: ' + error, 'danger');
+            showAlert('Error starting scan : ' + error, 'danger');
         });
     }
 
     monitorProgress() {
-    if (!this.activeScanId) return;
-    console.log("Polling lancé pour scan_id:", this.activeScanId);    
-    const progressBar = document.querySelector('.progress-bar');
-    const statusDiv = document.getElementById('scanStatus');
-    const downloadBtn = document.getElementById('downloadResultsBtn');
+        if (!this.activeScanId || !this.scanType) return;
 
-    this.updateInterval = setInterval(() => {
-        fetch(`/scan/nmap/${this.activeScanId}/status`)
+        console.log("Polling lancé pour scan_id :", this.activeScanId, "type :", this.scanType);
+
+        const progressBar = document.querySelector('.progress-bar');
+        const statusDiv = document.getElementById('scanStatus');
+        const downloadBtn = document.getElementById('downloadResultsBtn');
+        const hydraResultsTable = document.getElementById('hydraResultsTable');
+        const scanResults = document.getElementById('scanResults');
+        const scanTypeBadge = document.getElementById('scanType');
+        const scanTargetBadge = document.getElementById('scanTarget');
+
+        // Détermine endpoint selon type de scan
+        let statusEndpoint = '';
+        if (this.scanType === 'nmap') {
+            statusEndpoint = `/scan/nmap/${this.activeScanId}/status`;
+        } else if (this.scanType === 'hydra') {
+            statusEndpoint = `/scan/hydra/status/${encodeURIComponent(this.activeScanId)}`;
+        } else {
+            statusEndpoint = `/scan/status/${this.activeScanId}`;
+            return;
+        }
+
+        // Affiche le type de scan et la cible dans la modale
+        scanTypeBadge.textContent = this.scanType === 'nmap' ? 'Nmap Scan' : 'Hydra Scan';
+        if (this.scanType === 'nmap') {
+            const targetInput = document.getElementById('nmapTarget');
+            scanTargetBadge.textContent = targetInput ? targetInput.value : '';
+        } else if (this.scanType === 'hydra') {
+            const targetInput = document.getElementById('hydraTarget');
+            scanTargetBadge.textContent = targetInput ? targetInput.value : '';
+        }
+
+        // Reset bouton download au départ (désactivé)
+        if (downloadBtn) {
+            downloadBtn.disabled = true;
+            downloadBtn.onclick = null;
+        }
+        if (hydraResultsTable) hydraResultsTable.style.display = 'none';
+        if (scanResults) scanResults.style.display = 'block';
+
+        this.updateInterval = setInterval(() => {
+            fetch(statusEndpoint)
             .then(response => response.json())
             .then(data => {
                 console.log("Réponse status scan :", data);
@@ -76,31 +115,41 @@ class ScanManager {
                     progressBar.style.width = `${data.progress}%`;
                     progressBar.textContent = `${data.progress}%`;
                     statusDiv.textContent = data.message;
-                    
-                    // Arrête le polling dès que 100% atteint
-                    if (data.progress === 100) {
-                        this.stopMonitoring();
-                    }
-                    // Active le bouton si le scan est terminé et report_id existe
-                    if (data.scan_status === 'completed' && data.report_id) {
+
+                    if (data.scan && data.scan.current_status === 'completed' && data.report_id) {
+                        // Active le bouton de téléchargement selon type
                         if (downloadBtn) {
                             downloadBtn.disabled = false;
-                            downloadBtn.onclick = () => {
-                                window.open(`/scan/nmap/${this.activeScanId}/report`, '_blank');
-                            };
+                            if (this.scanType === 'nmap') {
+                                downloadBtn.onclick = () => {
+                                    window.open(`/scan/nmap/${this.activeScanId}/report`, '_blank');
+                                };
+                            } else if (this.scanType === 'hydra') {
+                                downloadBtn.onclick = () => {
+                                    window.open(`/scan/hydra/${this.activeScanId}/report`, '_blank');
+                                };
+                            }
                         }
+
+                        // Si hydra, afficher les résultats dans le tableau
+                        if (this.scanType === 'hydra' && data.scan && data.scan.results) {
+                            if (scanResults) scanResults.style.display = 'none';
+                            if (hydraResultsTable) {
+                                hydraResultsTable.style.display = 'table';
+                                this.updateHydraResultsTable(data.scan.results);
+                            }
+                        }
+
                         this.stopMonitoring();
-                        // Optionnel : charger les résultats si tu veux remplir un tableau
-                        // this.loadResults();
                     }
                 }
             })
             .catch(error => {
-                showAlert('Error monitoring scan: ' + error, 'danger');
+                showAlert('Error monitoring scan : ' + error, 'danger');
                 this.stopMonitoring();
             });
-    }, 5000);
-}
+        }, 5000);
+    }
 
     stopMonitoring() {
         if (this.updateInterval) {
@@ -109,50 +158,21 @@ class ScanManager {
         }
     }
 
-    loadResults() {
-        if (!this.activeScanId) return;
-
-        fetch(`/scan/nmap/${this.activeScanId}/report`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    this.updateResultsTable(data.report);
-                    showAlert('Scan completed successfully', 'success');
-                    const downloadBtn = document.getElementById('downloadResultsBtn');
-                    if (downloadBtn) {
-                        downloadBtn.disabled = false;
-                        // Stocke les résultats pour le téléchargement
-                        downloadBtn.dataset.results = JSON.stringify(data.report);
-                    }
-                } else {
-                    showAlert(data.message || 'Failed to load results', 'warning');
-                }
-            })
-            .catch(error => {
-                showAlert('Error loading results: ' + error, 'danger');
-            });
-    }
-
-    updateResultsTable(vulnerabilities) {
-        const tbody = document.getElementById('vulnerabilityTable').querySelector('tbody');
+    updateHydraResultsTable(results) {
+        const tbody = document.getElementById('hydraResultsTable').querySelector('tbody');
         tbody.innerHTML = '';
 
-        vulnerabilities.forEach(vuln => {
+        results.forEach(result => {
             const tr = document.createElement('tr');
+            const success = !!result.success;  // Converti en booléen sûr
             tr.innerHTML = `
+                <td>${result.host || 'N/A'}</td>
+                <td>${result.login || 'N/A'}</td>
+                <td>${result.password || 'N/A'}</td>
                 <td>
-                    <span class="badge severity-${getSeverityClass(vuln.severity)}">
-                        ${vuln.severity}
+                    <span class="badge bg-${success ? 'success' : 'danger'}">
+                        ${success ? 'Yes' : 'No'}
                     </span>
-                </td>
-                <td>${vuln.name}</td>
-                <td>${vuln.port || 'N/A'}</td>
-                <td>${this.formatCVEList(vuln.cve)}</td>
-                <td>${formatDate(vuln.detected_at)}</td>
-                <td>
-                    <button class="btn btn-sm btn-info" onclick="showVulnerabilityDetails(${JSON.stringify(vuln)})">
-                        Details
-                    </button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -181,33 +201,33 @@ class ScanManager {
                 showAlert('SQLMap scan started', 'success');
                 this.pollSqlmapResult();
                 const resultsModal = document.getElementById('resultsModal');
-                    if (resultsModal) {
-                        const modal = new bootstrap.Modal(resultsModal);
-                        modal.show();
-                    }
+                if (resultsModal) {
+                    const modal = new bootstrap.Modal(resultsModal);
+                    modal.show();
+                }
             } else {
                 showAlert(data.error || 'Failed to start SQLMap scan', 'danger');
             }
         })
-        .catch(err => showAlert('Error starting SQLMap scan: ' + err, 'danger'));
+        .catch(err => showAlert('Error starting SQLMap scan : ' + err, 'danger'));
     }
 
     pollSqlmapResult() {
-    if (!this.activeScanId) return;
+        if (!this.activeScanId) return;
 
-    const progressBar = document.querySelector('.progress-bar');
-    const statusDiv = document.getElementById('scanStatus');
-    const downloadBtn = document.getElementById('downloadResultsBtn');
-    const scanResults = document.getElementById('scanResults');
-    const scanTypeBadge = document.getElementById('scanType');
-    const scanTargetBadge = document.getElementById('scanTarget');
+        const progressBar = document.querySelector('.progress-bar');
+        const statusDiv = document.getElementById('scanStatus');
+        const downloadBtn = document.getElementById('downloadResultsBtn');
+        const scanResults = document.getElementById('scanResults');
+        const scanTypeBadge = document.getElementById('scanType');
+        const scanTargetBadge = document.getElementById('scanTarget');
 
-    // Affiche le type de scan et la cible dans la modale
-    scanTypeBadge.textContent = 'SQLMap Scan';
-    scanTargetBadge.textContent = document.getElementById('sqlmapTarget').value;
+        // Affiche le type de scan et la cible dans la modale
+        scanTypeBadge.textContent = 'SQLMap Scan';
+        scanTargetBadge.textContent = document.getElementById('sqlmapTarget').value;
 
-    this.updateInterval = setInterval(() => {
-        fetch(`/scan/sqlmap/result/${this.activeScanId}`)
+        this.updateInterval = setInterval(() => {
+            fetch(`/scan/sqlmap/result/${this.activeScanId}`)
             .then(res => res.json())
             .then(data => {
                 if (data.error) {
@@ -241,11 +261,11 @@ class ScanManager {
                 }
             })
             .catch(err => {
-                showAlert('Error polling SQLMap result: ' + err, 'danger');
+                showAlert('Error polling SQLMap result : ' + err, 'danger');
                 this.stopMonitoring();
             });
-    }, 5000); 
-}
+        }, 5000);
+    }
 }
 
 // Initialize scan manager
@@ -280,8 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }    
+
     const forms = [
-     
         { id: 'networkScanForm', endpoint: API_ENDPOINTS.networkDiscovery, dataExtractor: () => ({
             target: document.getElementById('networkTarget').value,
             scan_type: document.getElementById('networkScanType').value
@@ -291,25 +311,31 @@ document.addEventListener('DOMContentLoaded', () => {
             ports: document.getElementById('portRange').value,
             scan_type: document.getElementById('portScanType').value
         }) },
-        {  id: 'vulnerabilityScanForm',
-            endpoint: API_ENDPOINTS.vulnerabilityScan,
-            dataExtractor: () => ({
-                target: document.getElementById('vulnerabilityTarget').value
-            }) },
+        { id: 'vulnerabilityScanForm', endpoint: API_ENDPOINTS.vulnerabilityScan, dataExtractor: () => ({
+            target: document.getElementById('vulnerabilityTarget').value
+        }) },
         { id: 'nmapForm', endpoint: '/scan/nmap', dataExtractor: () => ({
-        target: document.getElementById('nmapTarget').value,
-        options: document.getElementById('nmapOptions').value === 'custom'
-            ? document.getElementById('nmapCustomOptions').value
-            : document.getElementById('nmapOptions').value
+            target: document.getElementById('nmapTarget').value,
+            options: document.getElementById('nmapOptions').value === 'custom'
+                ? document.getElementById('nmapCustomOptions').value
+                : document.getElementById('nmapOptions').value
         }) },
         { id: 'sqlmapForm', endpoint: '/scan/sqlmap', dataExtractor: () => ({
-        url: document.getElementById('sqlmapTarget').value,
-        level: parseInt(document.getElementById('sqlmapLevel').value),
-        risk: parseInt(document.getElementById('sqlmapRisk').value),
-        additional_args: document.getElementById('sqlmapArgs').value,
-        options: document.getElementById('sqlmapArgs').value
-        }) 
-        }
+            url: document.getElementById('sqlmapTarget').value,
+            level: parseInt(document.getElementById('sqlmapLevel').value),
+            risk: parseInt(document.getElementById('sqlmapRisk').value),
+            additional_args: document.getElementById('sqlmapArgs').value,
+            options: document.getElementById('sqlmapArgs').value
+        }) },
+        { id: 'hydraForm', 
+            endpoint: '/scan/hydra', dataExtractor: () => ({
+            target: document.getElementById('hydraTarget').value,
+            service: document.getElementById('hydraService').value,
+            username: document.getElementById('hydraUser').value,
+            password: document.getElementById('hydraPass').value,
+            formPath: document.getElementById('hydraHttpForm').value
+        }), 
+        }     
     ];
 
     forms.forEach(({ id, endpoint, dataExtractor }) => {
@@ -317,10 +343,15 @@ document.addEventListener('DOMContentLoaded', () => {
             handleFormSubmit(id, endpoint, dataExtractor, (formData) => {
                 scanManager.startSqlmapScan(formData);
             });
+        } else if (id === 'hydraForm') {
+            handleFormSubmit(id, endpoint, dataExtractor, (formData) => {
+                scanManager.startHydraScan(formData);
+            });
         } else {
             handleFormSubmit(id, endpoint, dataExtractor);
         }
     });
+
     const enableFormsCrawl = document.getElementById('enableFormsCrawl');
     const sqlmapArgsInput = document.getElementById('sqlmapArgs');
     let previousSqlmapArgs = '';

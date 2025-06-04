@@ -1,10 +1,13 @@
-from toolbox.models import SQLMapScanResult
+from toolbox.models import SQLMapScanResult, HydraScanResult
 from toolbox.port_scanner import PortScanner
 from toolbox import db
 from toolbox.celery import celery
 from toolbox.logger import logger
 import json
 from toolbox.utils import parse_sqlmap_output
+from toolbox.hydra_scanner import HydraScanner
+import traceback
+from datetime import datetime
 
 @celery.task(bind=True)
 def run_nmap_scan(self, targets, ports):
@@ -98,5 +101,34 @@ def run_sqlmap_scan(self, url, method='GET', data=None, level=1, risk=1, additio
         self.update_state(
             state='FAILURE',
             meta={"exc_type": type(e).__name__, "exc_message": str(e)}
+        )
+        raise
+
+@celery.task(bind=True)
+def run_hydra_scan(self, target, service, username=None, password=None, user_list=None, pass_list=None, options=None, form_path=None):
+    print(f"Hydra scan starting with user_list={user_list} and pass_list={pass_list}")
+    """Celery task to run an Hydra brute force scan"""
+    print(">>>> TÂCHE HYDRA LANCÉE <<<<") 
+    try:
+        scanner = HydraScanner()
+        result = scanner.run_hydra_scan(target, service, username, password, user_list, pass_list, options, form_path=form_path)
+        # Sauvegarde dans la base de données
+        scan_result = HydraScanResult(
+            scan_id=result['scan_id'],
+            scan_type=f'hydra_{service}',
+            target=target,
+            timestamp=datetime.now(),
+            results_json=json.dumps(result['results']),
+            summary_json=json.dumps(result['summary'])
+        )
+        from toolbox import db  # Import tardif pour éviter les cycles
+        db.session.add(scan_result)
+        db.session.commit()
+        return result
+    except Exception as e:
+        logger.log_error(
+            error_type='hydra_scan_task_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
         )
         raise

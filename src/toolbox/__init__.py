@@ -28,7 +28,10 @@ def create_app():
     from .auth import auth_bp
     from .models import User
     from .port_scanner import PortScanner
+    from .hydra_scanner import HydraScanner
     app.port_scanner = PortScanner(app=app)
+    app.hydra_scanner = HydraScanner(app=app)
+    
     # Enregistrement des blueprints
     app.register_blueprint(main_bp)
     app.register_blueprint(scan_bp, url_prefix='/scan')
