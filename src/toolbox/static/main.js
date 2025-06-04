@@ -80,7 +80,7 @@ class ScanManager {
         // Détermine endpoint selon type de scan
         let statusEndpoint = '';
         if (this.scanType === 'nmap') {
-            statusEndpoint = `/scan/nmap/${this.activeScanId}`;
+            statusEndpoint = `/scan/nmap/${this.activeScanId}/status`;
         } else if (this.scanType === 'hydra') {
             statusEndpoint = `/scan/hydra/status/${encodeURIComponent(this.activeScanId)}`;
         } else {
