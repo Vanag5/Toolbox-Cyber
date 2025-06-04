@@ -875,6 +875,7 @@ def generate_sqlmap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_rep
     doc.build(content)
     return report_filename
 
+
 @scan_bp.route('/hydra', methods=['POST'])
 def hydra_scan():
     """Endpoint to perform Hydra brute force scan"""
@@ -1150,3 +1151,4 @@ def generate_hydra_pdf_report(scan_data: dict, output_dir: str = '/app/scan_repo
 
     doc.build(content)
     return report_filename    
+
