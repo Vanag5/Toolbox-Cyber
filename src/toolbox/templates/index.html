@@ -103,7 +103,63 @@
         </div>
     </div>
 </div>
-
+     <!-- Hydra Scanner Card -->
+<div class="col-md-6 col-lg-4">
+        <div class="card tool-card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa fa-lock"></i> Hydra Brute Force</h5>
+                <p class="card-text">Testez la robustesse des mots de passe sur une cible.</p>
+                <form id="hydraForm" class="mt-3">
+                    <div class="mb-3">
+                        <label for="hydraTarget" class="form-label">Target:</label>
+                        <input type="text" class="form-control" id="hydraTarget" placeholder="e.g., 192.168.1.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraService" class="form-label">Service:</label>
+                        <select class="form-select" id="hydraService">
+                            <option value="ssh">SSH</option>
+                            <option value="ftp">FTP</option>
+                            <option value="http-post-form">HTTP POST Form</option>
+                            <option value="smb">SMB</option>
+                            <option value="mysql">MySQL</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraUser" class="form-label">Username (optionnel):</label>
+                        <input type="text" class="form-control" id="hydraUser" placeholder="e.g., admin">
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraUserList" class="form-label">User List File (optionnel):</label>
+                        <input type="text" class="form-control" id="hydraUserList" placeholder="e.g., /app/wordlists/users.txt">
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraPass" class="form-label">Password (optionnel):</label>
+                        <input type="text" class="form-control" id="hydraPass" placeholder="e.g., password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraPassList" class="form-label">Password List File (optionnel):</label>
+                        <input type="text" class="form-control" id="hydraPassList" placeholder="e.g., /app/wordlists/passwords.txt">
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraOptions" class="form-label">Options (optionnel):</label>
+                        <input type="text" class="form-control" id="hydraOptions" placeholder="e.g., -t 4 (4 threads)">
+                    </div>
+                    <div class="mb-3">
+                        <label for="hydraHttpForm" class="form-label">Form Path & Params:</label>
+                        <input type="text" class="form-control" id="hydraHttpForm"
+                            placeholder="/login.php:username=^USER^&password=^PASS^:Invalid login"
+                            required>
+                    <div class="form-text">
+                        Format : <code>/path:field1=^USER^&field2=^PASS^:message d’échec</code>
+                    </div>
+                </div>
+                    <button type="submit" class="btn btn-danger" aria-label="Start Hydra Scan">
+                        <i class="fa fa-play"></i> Start Scan
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>     
 </div>
 
     
@@ -132,6 +188,17 @@
                 <div id="scanStatus" class="mt-2"></div>
                 <div class="scan-result">
                     <pre id="scanResults" class="bg-light p-3"></pre>
+                    <table class="table table-striped" id="hydraResultsTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Host</th>
+                                <th>Login</th>
+                                <th>Password</th>
+                                <th>Success</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
         </div>

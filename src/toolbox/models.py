@@ -45,3 +45,16 @@ class SQLMapScanResult(db.Model):
     
     def __repr__(self):
         return f"<SQLMapScanResult scan_id={self.scan_id} target_url={self.target_url}>"
+
+class HydraScanResult(db.Model):
+    __tablename__ = 'hydra_scan_results'
+    id = db.Column(db.Integer, primary_key=True)
+    scan_id = db.Column(db.String(128), unique=True, nullable=False)
+    target = db.Column(db.String(100), nullable=False)
+    scan_type = db.Column(db.String(50), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    results_json = db.Column(db.Text, nullable=True) 
+    summary_json = db.Column(db.Text, nullable=False, default='{}')
+
+    def __repr__(self):
+        return f"<HydraScanResult scan_id={self.scan_id} target={self.target}>"

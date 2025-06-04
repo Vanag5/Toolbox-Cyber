@@ -7,6 +7,17 @@ RUN apt-get update && \
     git \
     python3-pip \
     perl \
+    build-essential \
+    libssl-dev \
+    libssh-dev \
+    libidn11-dev \
+    libpcre3-dev \
+    libgtk2.0-dev \
+    libpq-dev \
+    libmariadb-dev-compat \
+    libsvn-dev \
+    firebird-dev \
+    libmemcached-dev \
     libnet-ssleay-perl \
     libio-socket-ssl-perl \
     gcc \
@@ -19,6 +30,13 @@ RUN git clone https://github.com/sqlmapproject/sqlmap.git /opt/sqlmap && \
 ENV PATH="/opt/sqlmap:$PATH"
 
 WORKDIR /src
+
+# Clone and build Hydra
+RUN git clone https://github.com/vanhauser-thc/thc-hydra.git /opt/hydra && \
+    cd /opt/hydra && \
+    ./configure && \
+    make && \
+    make install
 
 # Create logs and scan_reports directories with proper permissions
 RUN mkdir -p /toolbox/logs /app/scan_reports && chmod 777 /toolbox/logs /app/scan_reports
