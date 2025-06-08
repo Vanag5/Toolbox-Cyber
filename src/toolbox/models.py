@@ -58,3 +58,20 @@ class HydraScanResult(db.Model):
 
     def __repr__(self):
         return f"<HydraScanResult scan_id={self.scan_id} target={self.target}>"
+    
+class ZAPScanResult(db.Model):
+    __tablename__ = 'zap_scan_results'
+    id = db.Column(db.Integer, primary_key=True)
+    # On passe scan_id en String(255) pour pouvoir y loger l’URL complète + suffixe
+    scan_id = db.Column(db.String(255), unique=True, nullable=False)
+    scan_type = db.Column(db.String(50), nullable=False)
+    target_url = db.Column(db.String(500), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    results_json = db.Column(db.Text, nullable=True)
+    summary_json = db.Column(db.Text, nullable=True)
+    raw_output = db.Column(db.Text, nullable=True)
+    task_id = db.Column(db.String(100), nullable=True)
+    task_type = db.Column(db.String(50), nullable=True)
+
+    def __repr__(self):
+        return f'<ZAPScanResult {self.scan_id}>'    

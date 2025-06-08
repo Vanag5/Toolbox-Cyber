@@ -35,6 +35,10 @@ class ScanManager {
         this.startScan('/scan/hydra', data, 'hydra');
     }
 
+    startZapScan(data) {
+    this.startScan('/scan/zap', data, 'zap');
+    }
+
     startScan(endpoint, data, scanType = 'nmap') {
         console.log('startScan called with endpoint:', endpoint, 'and data:', data, 'type:', scanType);
         this.scanType = scanType;
@@ -83,19 +87,33 @@ class ScanManager {
             statusEndpoint = `/scan/nmap/${this.activeScanId}/status`;
         } else if (this.scanType === 'hydra') {
             statusEndpoint = `/scan/hydra/status/${encodeURIComponent(this.activeScanId)}`;
+        } else if (this.scanType === 'zap') {
+            statusEndpoint = `/scan/zap/${encodeURIComponent(this.activeScanId)}/status`;
         } else {
             statusEndpoint = `/scan/status/${this.activeScanId}`;
             return;
-        }
+        } 
 
         // Affiche le type de scan et la cible dans la modale
-        scanTypeBadge.textContent = this.scanType === 'nmap' ? 'Nmap Scan' : 'Hydra Scan';
         if (this.scanType === 'nmap') {
+            scanTypeBadge.textContent = 'Nmap Scan';
             const targetInput = document.getElementById('nmapTarget');
             scanTargetBadge.textContent = targetInput ? targetInput.value : '';
         } else if (this.scanType === 'hydra') {
+            scanTypeBadge.textContent = 'Hydra Scan';
             const targetInput = document.getElementById('hydraTarget');
             scanTargetBadge.textContent = targetInput ? targetInput.value : '';
+        } else if (this.scanType === 'zap') {
+            scanTypeBadge.textContent = 'OWASP ZAP Scan';
+            const targetInput = document.getElementById('zapTarget');
+            scanTargetBadge.textContent = targetInput ? targetInput.value : '';
+        } else if (this.scanType === 'sqlmap') {
+            scanTypeBadge.textContent = 'SQLMap Scan';
+            const targetInput = document.getElementById('sqlmapTarget');
+            scanTargetBadge.textContent = targetInput ? targetInput.value : '';
+        } else {
+            scanTypeBadge.textContent = 'Scan';
+            scanTargetBadge.textContent = '';
         }
 
         // Reset bouton download au départ (désactivé)
@@ -127,6 +145,10 @@ class ScanManager {
                             } else if (this.scanType === 'hydra') {
                                 downloadBtn.onclick = () => {
                                     window.open(`/scan/hydra/${this.activeScanId}/report`, '_blank');
+                                };
+                            } else if (this.scanType === 'zap') {
+                                downloadBtn.onclick = () => {
+                                    window.open(`/scan/zap/${this.activeScanId}/report`, '_blank');
                                 };
                             }
                         }
@@ -278,7 +300,8 @@ const API_ENDPOINTS = {
     portScan: '/scan/ports',
     scanStatus: '/scan/nmap/<scan_id>/status',      
     scanReport: '/scan/nmap/<scan_id>/report',       
-    sqlmap: '/scan/sqlmap'
+    sqlmap: '/scan/sqlmap',
+    zapScan: '/scan/zap'
 };
 
 // Event listeners
@@ -334,9 +357,13 @@ document.addEventListener('DOMContentLoaded', () => {
             username: document.getElementById('hydraUser').value,
             password: document.getElementById('hydraPass').value,
             formPath: document.getElementById('hydraHttpForm').value
-        }), 
-        }     
-    ];
+        })},
+        { id: 'zapForm', 
+            endpoint: '/scan/zap', dataExtractor: () => ({
+                url: document.getElementById('zapTarget').value
+            }),
+        }    
+        ];
 
     forms.forEach(({ id, endpoint, dataExtractor }) => {
         if (id === 'sqlmapForm') {
@@ -347,6 +374,10 @@ document.addEventListener('DOMContentLoaded', () => {
             handleFormSubmit(id, endpoint, dataExtractor, (formData) => {
                 scanManager.startHydraScan(formData);
             });
+        } else if (id === 'zapForm') {
+        handleFormSubmit(id, endpoint, dataExtractor, (formData) => {
+            scanManager.startZapScan(formData);
+        });    
         } else {
             handleFormSubmit(id, endpoint, dataExtractor);
         }

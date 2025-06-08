@@ -4,14 +4,15 @@ services:
     build: .
     command: python -m toolbox.app
     ports:
-    - "5001:5000" 
+      - "5001:5000" 
     environment:
-    - FLASK_DEBUG=1
-    - PYTHONPATH=/src
-    - CELERY_BROKER_URL=redis://redis:6379/0
-    - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLASK_DEBUG=1
+      - PYTHONPATH=/src
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - ZAP_API_KEY=
     volumes:
-    - ./src:/src
+      - ./src:/src
     working_dir: /src
     depends_on:
       - db
@@ -58,21 +59,27 @@ services:
   minio:
     image: minio/minio
     ports:
-    - "9000:9000"
-    - "9001:9001"
+      - "9000:9000"
+      - "9001:9001"
     environment:
-    - MINIO_ROOT_USER=minioadmin
-    - MINIO_ROOT_PASSWORD=minioadmin
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
     command: server /data --console-address ":9001"
     volumes:
-    - minio_data:/data
+      - minio_data:/data
 
-  
-
+  zap:
+    image: zaproxy/zap-stable
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true
+    ports:
+      - "8080:8080"
+    environment:
+      - ZAP_API_KEY=
 
 volumes:
   postgres_data:
   minio_data:
+
  
 
   

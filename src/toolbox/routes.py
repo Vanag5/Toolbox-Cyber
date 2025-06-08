@@ -18,15 +18,18 @@ import uuid
 from typing import Dict
 from datetime import timedelta
 from .pdf_utils import generate_pdf_report
-from toolbox.models import ScanResult, SQLMapScanResult
+from toolbox.models import ScanResult, SQLMapScanResult, ZAPScanResult
 import json
 from flask_login import login_required
 from .tasks import run_sqlmap_scan
 from celery.result import AsyncResult
 from toolbox.celery import celery
 from .hydra_scanner import HydraScanner
-from .tasks import run_hydra_scan
+from .tasks import run_hydra_scan, run_zap_scan
 from toolbox import db
+from .zap_scanner import ZAPScanner
+from reportlab.platypus import PageBreak
+import re
 
 main_bp = Blueprint('main', __name__)
 report_bp = Blueprint('report', __name__, url_prefix='/report')
@@ -1018,7 +1021,7 @@ def hydra_scan_status(scan_id):
                     db.session.add(new_scan)
                     db.session.commit()
 
-                    logger.log_info(f"Hydra scan {scan_id} enregistré en base.")
+                    logger.info(f"Hydra scan {scan_id} enregistré en base.")
                 except Exception as db_error:
                     logger.log_error(
                         error_type='db_insert_error',
@@ -1152,3 +1155,290 @@ def generate_hydra_pdf_report(scan_data: dict, output_dir: str = '/app/scan_repo
     doc.build(content)
     return report_filename    
 
+@scan_bp.route('/zap', methods=['POST'])
+def zap_scan():
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        scan_type = data.get('scan_type', 'spider')  # spider ou active
+        level = data.get('level', 'Default')
+
+        if not url:
+            return jsonify({'error': 'URL is required'}), 400
+
+        scan_id = f"zap_{url}_{int(datetime.now().timestamp())}"
+        task = run_zap_scan.delay(scan_id, url, scan_type, level)
+
+        active_scans[scan_id] = {
+            'target': url,
+            'type': f'zap_{scan_type}',
+            'status': 'running',
+            'start_time': datetime.now().isoformat(),
+            'end_time': None,
+            'task_id': task.id
+        }
+
+        logger.log_scan(
+            scan_type=f'zap_{scan_type}',
+            target=url,
+            results={'status': 'initiated', 'scan_id': scan_id}
+        )
+
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan_id,
+            'task_id': task.id,
+            'message': f'ZAP {scan_type} scan started for {url}'
+        }), 202
+    except Exception as e:
+        logger.log_error(
+            error_type='zap_scan_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@scan_bp.route('/zap/<path:scan_id>/status', methods=['GET'])
+def zap_scan_status(scan_id):
+    try:
+        from urllib.parse import unquote
+        decoded_id = unquote(scan_id)
+
+        scan_data = active_scans.get(decoded_id)
+        if not scan_data:
+            logger.log_error(
+                error_type='zap_scan_status_error',
+                error_message=f'Scan not found: {decoded_id}'
+            )
+            return jsonify({
+                'status': 'error',
+                'message': 'Scan not found',
+                'scan_id': decoded_id
+            }), 404
+
+        task_id     = scan_data.get('task_id')
+        task_result = AsyncResult(task_id, app=celery)
+
+        response = {
+            'status':   'success',
+            'progress': 0,
+            'message':  '',
+            'scan': {
+                'id':             decoded_id,
+                'target':         scan_data.get('target', ''),
+                'type':           scan_data.get('type', 'zap'),
+                'current_status': scan_data.get('status', 'unknown'),
+                'start_time':     scan_data.get('start_time', ''),
+                'end_time':       scan_data.get('end_time', ''),
+                'task_status':    task_result.state,
+                'task_info':      task_result.info or {}
+            },
+            'report_id': None
+        }
+
+        # Si le task envoie des informations de progression
+        if task_result.state == 'PROGRESS' and isinstance(task_result.info, dict):
+            response['progress'] = task_result.info.get('progress', 0)
+            response['message']  = task_result.info.get('message', '')
+
+        # Si le task est terminé avec succès
+        if task_result.state == 'SUCCESS':
+            scan_data['status']   = 'completed'
+            scan_data['end_time'] = datetime.now().isoformat()
+            active_scans[decoded_id] = scan_data
+
+            result = task_result.result or {}
+            response['scan']['results'] = result.get('results', [])
+            response['report_id']       = f"report_{decoded_id}"
+
+        # → On renvoie TOUJOURS la réponse, qu’on soit ici en PENDING, FAILURE, PROGRESS ou SUCCESS.
+        return jsonify(response)
+
+    except Exception as e:
+        logger.log_error(
+            error_type='zap_scan_status_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({
+            'status': 'error',
+            'message': str(e),
+            'scan_id': scan_id
+        }), 500
+
+
+@scan_bp.route('/zap/<path:scan_id>/report', methods=['GET'])
+def download_zap_report(scan_id):
+    try:
+        scan = ZAPScanResult.query.filter_by(scan_id=scan_id).first()
+        if not scan:
+            return jsonify({'status': 'error', 'message': 'Scan not found'}), 404
+
+        scan_data = {
+            'scan_type': scan.scan_type,
+            'target': scan.target_url,
+            'timestamp': scan.timestamp.isoformat(),
+            'results': json.loads(scan.results_json) if scan.results_json else [],
+            'summary': json.loads(scan.summary_json) if scan.summary_json else {}
+        }
+
+        report_path = generate_zap_pdf_report(scan_data)
+        logger.info(f"PDF path: {report_path}")
+        logger.info(f"Existe: {os.path.exists(report_path)}")
+        if os.path.exists(report_path):
+            logger.info(f"Taille du fichier: {os.path.getsize(report_path)} octets")
+
+        return send_file(
+            report_path,
+            as_attachment=True,
+            download_name=f"zap_scan_report_{scan_id}.pdf"
+        )
+    except Exception as e:
+        logger.log_error(
+            error_type='zap_report_download_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+def generate_zap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_reports') -> str:
+    import re
+
+    os.makedirs(output_dir, exist_ok=True)
+    report_filename = f"{output_dir}/zap_scan_{uuid.uuid4().hex[:8]}.pdf"
+    doc = SimpleDocTemplate(report_filename, pagesize=letter,
+                            rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+    content = []
+    styles = getSampleStyleSheet()
+
+    # Title
+    title = Paragraph(
+        f"{scan_data.get('scan_type', 'ZAP Scan')} Report for {scan_data.get('target', 'Unknown Target')}",
+        styles['Title']
+    )
+    content.append(title)
+    content.append(Spacer(1, 12))
+
+    # Scan Details
+    details = [
+        ['Scan Type', scan_data.get('scan_type', 'Unknown')],
+        ['Target', scan_data.get('target', 'Unknown')],
+        ['Timestamp', scan_data.get('timestamp', 'Unknown')]
+    ]
+    details_table = Table(details, colWidths=[2*inch, 4*inch])
+    details_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    content.append(details_table)
+    content.append(Spacer(1, 12))
+
+    # Safe cell style with strong wrapping
+    cell_style = ParagraphStyle(
+        name='TableCell',
+        fontSize=6,
+        leading=8,
+        wordWrap='CJK',
+        allowWidows=0,
+        allowOrphans=0,
+        spaceAfter=2,
+    )
+
+    def wrap_cell(text, max_len=300):
+        if not text:
+            return Paragraph('', cell_style)
+
+        text = str(text)
+
+        # Remove invisible/invalid characters
+        text = re.sub(r'[^\x20-\x7E\u00A0-\uFFFF]+', '', text)
+
+        # Limit line length to avoid huge rows
+        text = text.replace('\n', '<br/>').replace('\r', '')
+
+        # Truncate if needed
+        if len(text) > max_len:
+            text = text[:max_len] + '...'
+
+        # Add spaces in long continuous strings
+        text = re.sub(r'([^\s]{50})', r'\1 ', text)
+
+        return Paragraph(text, cell_style)
+
+    # Results Table
+    results = scan_data.get('results', [])
+    if results:
+        content.append(Paragraph("Scan Results", styles['Heading2']))
+
+        # Header row
+        raw_data = [['Alert', 'Risk', 'URI', 'Parameter', 'Solution']]
+
+        # Limit number of rows to avoid overflow
+        MAX_ROWS = 100
+        for result in results[:MAX_ROWS]:
+            raw_data.append([
+                result.get('alert', 'N/A'),
+                result.get('risk', 'N/A'),
+                result.get('uri', 'N/A'),
+                result.get('param', 'N/A'),
+                result.get('solution', 'N/A')
+            ])
+
+        # Calculate column widths based on header (safe default)
+        colWidths = [1.5*inch, 0.8*inch, 2*inch, 1*inch, 2*inch]
+
+        # Apply secure wrapping to each cell
+        results_data = [[wrap_cell(cell) for cell in row] for row in raw_data]
+
+        results_table = Table(results_data, colWidths=colWidths)
+        results_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black)
+        ]))
+
+        content.append(results_table)
+        content.append(Spacer(1, 12))
+
+    # Summary
+    summary = scan_data.get('summary', {})
+    summary_text = Paragraph(
+        f"Total Alerts: {summary.get('total_alerts', 0)}<br/>"
+        f"High Risk: {summary.get('risk_levels', {}).get('High', 0)}<br/>"
+        f"Medium Risk: {summary.get('risk_levels', {}).get('Medium', 0)}<br/>"
+        f"Low Risk: {summary.get('risk_levels', {}).get('Low', 0)}<br/>"
+        f"Informational: {summary.get('risk_levels', {}).get('Informational', 0)}",
+        styles['Normal']
+    )
+    content.append(summary_text)
+
+    doc.build(content)
+    return report_filename
+
+
+@scan_bp.route('/tasks/<task_id>', methods=['GET'])
+def get_task_status(task_id):
+    try:
+        task = AsyncResult(task_id, app=celery)
+        response = {
+            'task_id': task_id,
+            'state': task.state,
+            'info': task.info if task.info else None
+        }
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500

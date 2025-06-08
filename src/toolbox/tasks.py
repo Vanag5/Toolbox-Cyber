@@ -1,4 +1,4 @@
-from toolbox.models import SQLMapScanResult, HydraScanResult
+from toolbox.models import SQLMapScanResult, HydraScanResult, ZAPScanResult
 from toolbox.port_scanner import PortScanner
 from toolbox import db
 from toolbox.celery import celery
@@ -6,8 +6,11 @@ from toolbox.logger import logger
 import json
 from toolbox.utils import parse_sqlmap_output
 from toolbox.hydra_scanner import HydraScanner
+from toolbox.zap_scanner import ZAPScanner
 import traceback
 from datetime import datetime
+from flask import current_app
+from zapv2 import ZAPv2
 
 @celery.task(bind=True)
 def run_nmap_scan(self, targets, ports):
@@ -132,3 +135,66 @@ def run_hydra_scan(self, target, service, username=None, password=None, user_lis
             stack_trace=traceback.format_exc()
         )
         raise
+
+@celery.task(bind=True)
+def run_zap_scan(self, scan_id, url, scan_type='spider', level='Default'):
+    """
+    - scan_id   : identifiant généré côté route
+    - url       : URL à scanner
+    - scan_type : 'spider' ou 'active'
+    - level     : niveau (non utilisé ici)
+    """
+    try:
+        # Récupère l’app Flask si on est dans un contexte HTTP (optionnel)
+        from flask import has_app_context, current_app
+        app = current_app._get_current_object() if has_app_context() else None
+
+        logger.info(f"[ZAP TASK] Lancement du scan {scan_id} sur {url} (type={scan_type})")
+
+        # Initialisation du scanner (ZAP tourne dans son conteneur Docker)
+        scanner = ZAPScanner(app=app)
+
+        # Exécution du scan (ne renvoie plus de scan_id ici)
+        result = scanner.run_zap_scan(url, scan_type, level)
+
+        # Si le scan a été complété avec succès, on enregistre en base AVEC LE scan_id fourni
+        if result.get('status') == 'completed':
+            scan_result = ZAPScanResult(
+                scan_id=scan_id,                   # <-- on utilise scan_id ici
+                scan_type=f'zap_{scan_type}',
+                target_url=url,
+                timestamp=datetime.now(),
+                results_json=json.dumps(result.get('results', [])),
+                summary_json=json.dumps(result.get('summary', {})),
+                raw_output=json.dumps(result.get('results', [])),
+                task_id=self.request.id,
+                task_type='zap_scan'
+            )
+            db.session.add(scan_result)
+            db.session.commit()
+            logger.info(f"[ZAP TASK] Scan {scan_id} enregistré en base.")
+
+        # Toujours retourner le même scan_id + l’état et résultats
+        return {
+            'scan_id': scan_id,
+            'status': result.get('status'),
+            'results': result.get('results', []),
+            'summary': result.get('summary', {})
+        }
+
+    except Exception as e:
+        # En cas d’erreur, on loggue et on signale FAILURE
+        logger.log_error(
+            error_type='zap_scan_task_error',
+            error_message=str(e),
+            stack_trace=traceback.format_exc()
+        )
+        self.update_state(
+            state='FAILURE',
+            meta={"exc_type": type(e).__name__, "exc_message": str(e)}
+        )
+        return {
+            "scan_id": scan_id,
+            "status": "failed",
+            "error": str(e)
+        }
