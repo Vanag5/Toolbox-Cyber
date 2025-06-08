@@ -18,7 +18,7 @@ import uuid
 from typing import Dict
 from datetime import timedelta
 from .pdf_utils import generate_pdf_report
-from toolbox.models import ScanResult, SQLMapScanResult, ZAPScanResult
+from toolbox.models import ScanResult, SQLMapScanResult, ZAPScanResult, TimelineEvent
 import json
 from flask_login import login_required
 from .tasks import run_sqlmap_scan
@@ -30,6 +30,7 @@ from toolbox import db
 from .zap_scanner import ZAPScanner
 from reportlab.platypus import PageBreak
 import re
+from .utils import log_event
 
 main_bp = Blueprint('main', __name__)
 report_bp = Blueprint('report', __name__, url_prefix='/report')
@@ -471,8 +472,11 @@ def download_nmap_report(scan_id):
             'summary': json.loads(scan.summary_json) if scan.summary_json else {}
         }
         report_path = generate_pdf_report(scan_data)
+        log_event('report_generated', f'Rapport généré pour le scan {scan_id}', scan_id)
         return send_file(report_path, as_attachment=True, download_name=f"nmap_scan_report_{scan_id}.pdf")
+    
     except Exception as e:
+        log_event('error', f'Erreur lors de la génération du rapport : {str(e)}', scan_id)
         logger.log_error(
             error_type='report_download_error',
             error_message=str(e),
@@ -789,7 +793,7 @@ def download_sqlmap_report(task_id):
 
         # Fonction à créer similaire à generate_pdf_report mais pour SQLMap
         report_path = generate_sqlmap_pdf_report(scan_data)
-
+        log_event('report_generated', f'Rapport généré pour le scan {task_id}', task_id)
         return send_file(
             report_path,
             as_attachment=True,
@@ -797,6 +801,7 @@ def download_sqlmap_report(task_id):
         )
 
     except Exception as e:
+        log_event('error', f'Erreur lors de la génération du rapport : {str(e)}', task_id)
         logger.log_error(
             error_type='sqlmap_report_download_error',
             error_message=str(e),
@@ -1061,12 +1066,14 @@ def download_hydra_report(scan_id):
         }
         
         report_path = generate_hydra_pdf_report(scan_data)
+        log_event('report_generated', f'Rapport généré pour le scan {scan_id}', scan_id)
         return send_file(
             report_path,
             as_attachment=True,
             download_name=f"hydra_scan_report_{scan_id}.pdf"
         )
     except Exception as e:
+        log_event('error', f'Erreur lors de la génération du rapport : {str(e)}', scan_id)
         logger.log_error(
             error_type='hydra_report_download_error',
             error_message=str(e),
@@ -1243,6 +1250,7 @@ def zap_scan_status(scan_id):
 
         # Si le task est terminé avec succès
         if task_result.state == 'SUCCESS':
+            log_event('scan_completed', f'Scan terminé avec succès', decoded_id)
             scan_data['status']   = 'completed'
             scan_data['end_time'] = datetime.now().isoformat()
             active_scans[decoded_id] = scan_data
@@ -1287,13 +1295,15 @@ def download_zap_report(scan_id):
         logger.info(f"Existe: {os.path.exists(report_path)}")
         if os.path.exists(report_path):
             logger.info(f"Taille du fichier: {os.path.getsize(report_path)} octets")
-
+        log_event('report_generated', f'Rapport généré pour le scan {scan_id}', scan_id)
         return send_file(
             report_path,
             as_attachment=True,
             download_name=f"zap_scan_report_{scan_id}.pdf"
         )
+        
     except Exception as e:
+        log_event('error', f'Erreur lors de la génération du rapport : {str(e)}', scan_id)
         logger.log_error(
             error_type='zap_report_download_error',
             error_message=str(e),
@@ -1303,7 +1313,7 @@ def download_zap_report(scan_id):
             'status': 'error',
             'message': str(e)
         }), 500
-
+        
 def generate_zap_pdf_report(scan_data: dict, output_dir: str = '/app/scan_reports') -> str:
     import re
 
@@ -1442,3 +1452,8 @@ def get_task_status(task_id):
         return jsonify(response)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+@scan_bp.route('/events', methods=['GET'])
+def get_timeline_events():
+    events = TimelineEvent.query.order_by(TimelineEvent.timestamp.desc()).limit(100).all()
+    return jsonify([e.to_dict() for e in events])    

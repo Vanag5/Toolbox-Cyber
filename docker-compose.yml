@@ -1,16 +1,19 @@
-# Docker Compose file for the Toolbox Cyber project
+# Docker Compose file pour le projet Toolbox Cyber
 services:
   toolbox:
     build: .
     command: python -m toolbox.app
     ports:
-      - "5001:5000" 
+      - "5001:5000"  # accessible via localhost:5001
+    networks:
+      - frontend
+      - backend
     environment:
-      - FLASK_DEBUG=1
-      - PYTHONPATH=/src
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - ZAP_API_KEY=
+      FLASK_DEBUG: "1"
+      PYTHONPATH: /src
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ZAP_API_KEY: ""
     volumes:
       - ./src:/src
     working_dir: /src
@@ -24,9 +27,9 @@ services:
     build: .
     command: celery -A toolbox.celery_worker.celery worker --loglevel=info
     environment:
-      - PYTHONPATH=/src
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      PYTHONPATH: /src
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
       - ./src:/src
       - ./scan_reports:/scan_reports
@@ -34,11 +37,15 @@ services:
       - redis
       - db
       - minio
+    networks:
+      - backend
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6380:6379"
+    expose:
+      - "6379"
+    networks:
+      - backend
 
   db:
     image: postgres:15-alpine
@@ -46,10 +53,12 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: toolbox_db
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
+    networks:
+      - backend
     volumes:
-      - postgres_data:/var/lib/postgresql/data  
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres"]
       interval: 10s
@@ -58,12 +67,14 @@ services:
 
   minio:
     image: minio/minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    expose:
+      - "9000"
+      - "9001"
+    networks:
+      - backend
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -74,12 +85,14 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - ZAP_API_KEY=
+      ZAP_API_KEY: ""
+    networks:
+      - backend
 
 volumes:
   postgres_data:
   minio_data:
 
- 
-
-  
+networks:
+  frontend:
+  backend:

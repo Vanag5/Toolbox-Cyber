@@ -1,6 +1,6 @@
 from toolbox import db
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import datetime, timezone
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -75,3 +75,23 @@ class ZAPScanResult(db.Model):
 
     def __repr__(self):
         return f'<ZAPScanResult {self.scan_id}>'    
+
+class TimelineEvent(db.Model):
+    __tablename__ = 'timeline_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    event_type = db.Column(db.String(50), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    scan_id = db.Column(db.String(255), nullable=True)  # si applicable
+    user = db.Column(db.String(100), nullable=True)  # optionnel : qui a déclenché l’action
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.replace(tzinfo=timezone.utc).isoformat(),
+            'event_type': self.event_type,
+            'message': self.message,
+            'scan_id': self.scan_id,
+            'user': self.user
+        }
