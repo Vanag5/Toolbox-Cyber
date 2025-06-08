@@ -1,6 +1,6 @@
 FROM python:3.11-slim-bullseye
 
-# Install system dependencies
+# Install system dependencies and OWASP ZAP in a single RUN to avoid cache issues
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
     nmap \
@@ -21,9 +21,17 @@ RUN apt-get update && \
     libnet-ssleay-perl \
     libio-socket-ssl-perl \
     gcc \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    wget \
+    openjdk-17-jre && \
+    # Download and verify OWASP ZAP 2.16.1
+    wget -O /tmp/ZAP_2.16.1_Linux.tar.gz https://github.com/zaproxy/zaproxy/releases/download/v2.16.1/ZAP_2.16.1_Linux.tar.gz && \
+    echo "5b2eb8319b085121a6e8ad50d69d67dbef8c867166f71a937bfc888d247a2ac1 /tmp/ZAP_2.16.1_Linux.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/ZAP_2.16.1_Linux.tar.gz -C /opt && \
+    ln -s /opt/ZAP_2.16.1/zap.sh /usr/local/bin/zap && \
+    # rm -f /tmp/ZAP_2.16.1
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Clone sqlmap manually (it is not an apt package)
+# Clone sqlmap manually
 RUN git clone https://github.com/sqlmapproject/sqlmap.git /opt/sqlmap && \
     ln -s /opt/sqlmap/sqlmap.py /usr/local/bin/sqlmap
 

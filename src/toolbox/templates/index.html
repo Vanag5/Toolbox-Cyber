@@ -9,6 +9,7 @@
     </div>
 </div>
 
+<!-- ====== Première ligne : Nmap / Vulnerability / SQLMap ====== -->
 <div class="row g-4">
     <!-- Nmap Scanner Card -->
     <div class="col-md-6 col-lg-4">
@@ -39,6 +40,7 @@
             </div>
         </div>
     </div>
+
     <!-- Vulnerability Scanner Card -->
     <div class="col-md-6 col-lg-4">
         <div class="card tool-card h-100">
@@ -57,54 +59,59 @@
             </div>
         </div>
     </div>
+
     <!-- SQLMap Scanner Card -->
-<div class="col-md-6 col-lg-4">
-    <div class="card tool-card h-100">
-        <div class="card-body">
-            <h5 class="card-title"><i class="fa fa-database"></i> SQLMap Scanner</h5>
-            <p class="card-text">Testez les injections SQL sur une cible donnée.</p>
-            <form id="sqlmapForm" class="mt-3">
-                <div class="mb-3">
-                    <label for="sqlmapTarget" class="form-label">Target URL:</label>
-                    <input type="text" class="form-control" id="sqlmapTarget" placeholder="https://example.com/vuln.php?id=1" required>
-                </div>
-                <div class="mb-3">
-                    <label for="sqlmapLevel" class="form-label">Niveau (level) :</label>
-                    <select class="form-select" id="sqlmapLevel">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="3" selected>3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                    </select>
-                </div>    
-                <div class="mb-3">
-                    <label for="sqlmapRisk" class="form-label">Risque (risk) :</label>
-                    <select class="form-select" id="sqlmapRisk">
-                        <option value="1">1</option>
-                        <option value="2" selected>2</option>
-                        <option value="3">3</option>
-                    </select>
-                </div>
-                <div class="form-check mb-2">
-                    <input class="form-check-input" type="checkbox" value="" id="enableFormsCrawl">
-                    <label class="form-check-label" for="enableFormsCrawl">
-                         Ajouter automatiquement <code>--forms --crawl=2</code>
-                    </label>
-                </div>
-                <div class="mb-3">
-                    <label for="sqlmapArgs" class="form-label">Options SQLMap supplémentaires :</label>
-                    <input type="text" class="form-control" id="sqlmapArgs" placeholder="e.g., --forms --crawl=2">
-                </div>
-                <button type="submit" class="btn btn-warning" aria-label="Start SQLMap Scan">
-                    <i class="fa fa-play"></i> Start Scan
-                </button>
-            </form>
+    <div class="col-md-6 col-lg-4">
+        <div class="card tool-card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa fa-database"></i> SQLMap Scanner</h5>
+                <p class="card-text">Testez les injections SQL sur une cible donnée.</p>
+                <form id="sqlmapForm" class="mt-3">
+                    <div class="mb-3">
+                        <label for="sqlmapTarget" class="form-label">Target URL:</label>
+                        <input type="text" class="form-control" id="sqlmapTarget" placeholder="https://example.com/vuln.php?id=1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sqlmapLevel" class="form-label">Niveau (level) :</label>
+                        <select class="form-select" id="sqlmapLevel">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3" selected>3</option>
+                            <option value="4">4</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sqlmapRisk" class="form-label">Risque (risk) :</label>
+                        <select class="form-select" id="sqlmapRisk">
+                            <option value="1">1</option>
+                            <option value="2" selected>2</option>
+                            <option value="3">3</option>
+                        </select>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" value="" id="enableFormsCrawl">
+                        <label class="form-check-label" for="enableFormsCrawl">
+                            Ajouter automatiquement <code>--forms --crawl=2</code>
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="sqlmapArgs" class="form-label">Options SQLMap supplémentaires :</label>
+                        <input type="text" class="form-control" id="sqlmapArgs" placeholder="e.g., --forms --crawl=2">
+                    </div>
+                    <button type="submit" class="btn btn-warning" aria-label="Start SQLMap Scan">
+                        <i class="fa fa-play"></i> Start Scan
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
 </div>
-     <!-- Hydra Scanner Card -->
-<div class="col-md-6 col-lg-4">
+
+<!-- ====== Deuxième ligne : Hydra / OWASP ZAP ====== -->
+<div class="row g-4 mt-1">
+    <!-- Hydra Scanner Card -->
+    <div class="col-md-6 col-lg-6">
         <div class="card tool-card h-100">
             <div class="card-body">
                 <h5 class="card-title"><i class="fa fa-lock"></i> Hydra Brute Force</h5>
@@ -146,23 +153,45 @@
                     </div>
                     <div class="mb-3">
                         <label for="hydraHttpForm" class="form-label">Form Path & Params:</label>
-                        <input type="text" class="form-control" id="hydraHttpForm"
-                            placeholder="/login.php:username=^USER^&password=^PASS^:Invalid login"
-                            required>
-                    <div class="form-text">
-                        Format : <code>/path:field1=^USER^&field2=^PASS^:message d’échec</code>
+                        <input type="text" class="form-control" id="hydraHttpForm" placeholder="/login.php:username=^USER^&password=^PASS^:Invalid login" required>
+                        <div class="form-text">
+                            Format : <code>/path:field1=^USER^&field2=^PASS^:message d’échec</code>
+                        </div>
                     </div>
-                </div>
                     <button type="submit" class="btn btn-danger" aria-label="Start Hydra Scan">
                         <i class="fa fa-play"></i> Start Scan
                     </button>
                 </form>
             </div>
         </div>
-    </div>     
-</div>
+    </div>
 
-    
+    <!-- OWASP ZAP Scanner Card -->
+    <div class="col-md-6 col-lg-6">
+        <div class="card tool-card h-100">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fa fa-spider"></i> OWASP ZAP Scanner</h5>
+                <p class="card-text">Testez les vulnérabilités web avec OWASP ZAP.</p>
+                <form id="zapForm" class="mt-3">
+                    <div class="mb-3">
+                        <label for="zapTarget" class="form-label">Target URL:</label>
+                        <input type="text" class="form-control" id="zapTarget" placeholder="https://example.com" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="zapScanType" class="form-label">Scan Type:</label>
+                        <select class="form-select" id="zapScanType">
+                            <option value="spider">Spider (Passive)</option>
+                            <option value="active">Active Scan</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" aria-label="Start ZAP Scan">
+                        <i class="fa fa-play"></i> Start Scan
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Results Modal -->
 <div class="modal fade" id="resultsModal" tabindex="-1">

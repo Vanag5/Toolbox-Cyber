@@ -13,10 +13,11 @@ Flask-Migrate==4.0.4
 
 # Network Scanning and Security
 python-libnmap==0.7.0
-python-nmap
+python-nmap==0.7.1
 scapy==2.5.0
 pyOpenSSL==23.2.0
 netaddr==0.8.0
+python-owasp-zap-v2.4==0.0.22
 
 # Data Processing and Visualization
 numpy>=1.26.0
@@ -41,7 +42,6 @@ cryptography==41.0.3
 beautifulsoup4==4.12.2
 requests
 psycopg2-binary==2.9.6
-Flask-SQLAlchemy==3.0.5
 
 # Authentification utilisateur avec gestion des sessions
 Flask-Login==0.6.3
