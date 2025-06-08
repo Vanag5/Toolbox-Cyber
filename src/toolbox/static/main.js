@@ -398,3 +398,39 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+async function fetchTimelineEvents() {
+  try {
+    const response = await fetch('/scan/events');
+    if (!response.ok) {
+      throw new Error(`Erreur HTTP: ${response.status}`);
+    }
+    const events = await response.json();
+
+    const timeline = document.getElementById('timeline');
+    timeline.innerHTML = ''; // Vide la liste avant de remplir
+
+    if (events.length === 0) {
+      timeline.innerHTML = '<li class="list-group-item">Aucun événement trouvé.</li>';
+      return;
+    }
+
+    events.forEach(event => {
+      const li = document.createElement('li');
+      li.className = 'list-group-item';
+      const date = new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'short',
+        timeStyle: 'medium',
+        timeZone: 'Europe/Paris'
+    }).format(new Date(event.timestamp));
+      li.innerHTML = `<strong>${date}</strong> - ${event.event_type} - ${event.message}`;
+      timeline.appendChild(li);
+    });
+  } catch (error) {
+    console.error('Erreur lors du chargement de la timeline:', error);
+  }
+}
+
+// Quand le DOM est prêt, on lance la fonction pour charger les événements
+document.addEventListener('DOMContentLoaded', () => {
+  fetchTimelineEvents();
+});

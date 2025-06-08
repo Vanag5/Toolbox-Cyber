@@ -233,4 +233,22 @@
         </div>
     </div>
 </div>
+<!-- ====== Timeline des événements ====== -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-dark text-white">
+        <i class="fa fa-clock"></i> Timeline des événements
+        <button class="btn btn-sm btn-light float-end" onclick="fetchTimeline()">
+          <i class="fa fa-refresh"></i> Rafraîchir
+        </button>
+      </div>
+      <div class="card-body">
+        <ul id="timeline" class="list-group">
+          <!-- Les événements s'afficheront ici -->
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

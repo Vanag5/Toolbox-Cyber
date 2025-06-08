@@ -26,7 +26,7 @@ def create_app():
     # Importation différée pour éviter les imports circulaires
     from .routes import main_bp, scan_bp, report_bp
     from .auth import auth_bp
-    from .models import User
+    from .models import User, TimelineEvent 
     from .port_scanner import PortScanner
     from .hydra_scanner import HydraScanner
     from .zap_scanner import ZAPScanner

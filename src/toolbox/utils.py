@@ -1,3 +1,6 @@
+from toolbox import db
+from .models import TimelineEvent
+
 def parse_sqlmap_output(raw_output: str):
     results = []
     dbms = None
@@ -43,3 +46,13 @@ def parse_sqlmap_output(raw_output: str):
             r['dbms'] = dbms
 
     return results, dbms
+
+def log_event(event_type, message, scan_id=None, user=None):
+    event = TimelineEvent(
+        event_type=event_type,
+        message=message,
+        scan_id=scan_id,
+        user=user
+    )
+    db.session.add(event)
+    db.session.commit()
