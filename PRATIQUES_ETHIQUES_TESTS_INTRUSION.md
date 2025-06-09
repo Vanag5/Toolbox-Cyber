@@ -19,7 +19,6 @@ Ce manuel présente les bonnes pratiques à suivre pour effectuer des tests d'in
 
 - **OWASP ZAP** : scanner de vulnérabilités pour applications web.
 - **Nmap** : scan réseau et détection de services.
-- **Metasploit** : exploitation et tests ciblés.
 - **Wireshark/tcpdump** : analyse réseau.
 - **Postman** ou Curl : tests manuels d’API.
 - **SQLMAP** : détection et exploitation d'injections SQL.
