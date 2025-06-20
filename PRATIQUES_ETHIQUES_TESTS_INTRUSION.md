@@ -8,6 +8,28 @@ Ce manuel présente les bonnes pratiques à suivre pour effectuer des tests d'in
 
 - **Portée** : limiter les tests aux composants du projet (API Flask, base PostgreSQL, stockage Minio, services Redis et Celery, scans ZAP).
 - **Autorisation** : obtenir une autorisation écrite avant tout test, éviter toute activité hors périmètre.
+ 
+** Avant toute utilisation de la Toolbox-Cyber sur une cible réelle, il est obligatoire d’obtenir une autorisation formelle écrite du propriétaire du système. Cette autorisation doit mentionner :
+
+	Plages IP à tester,
+	Horaires autorisés,
+	Périmètre fonctionnel inclus (ex. : sites, API, serveurs),
+	Type de test autorisé (non destructif, exploratoire, intrusif limité, etc.).
+** Tout test réalisé sans cette autorisation constitue une infraction pénale en droit français (article 323-1 du Code pénal) **
+
+- Respect de la vie privée et des données
+Aucune donnée personnelle ne doit être exploitée, copiée, ni transférée.
+Les journaux et rapports doivent être anonymisés avant toute diffusion externe.
+Les logs utilisateurs (historiques, IP, identifiants) sont des données sensibles et doivent être traitées conformément au RGPD.
+
+Environnement de test sécurisé
+Les tests d’intrusion doivent être exécutés :
+	Dans un environnement isolé (via Docker Compose ou réseau fermé),
+	Sans accès à Internet sauf exception contrôlée,
+	Avec des identifiants par défaut modifiés (MinIO, PostgreSQL, Flask admin),
+	En mode lecture seule pour toute base réelle.
+	**  Ne jamais exécuter la toolbox directement en production.** 
+
 
  3. Environnement de test
 
